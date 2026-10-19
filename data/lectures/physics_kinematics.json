@@ -1,0 +1,102 @@
+{
+  "id": "physics_kinematics",
+  "title": "Grade 11 Physics - Kinematics: Motion in One Dimension",
+  "subject": "Physics",
+  "grade": "Grade 11",
+  "duration_seconds": 360.0,
+  "video_url": "/media/sample_lecture_linux.mp4",
+  "timing_config": {
+    "min_trigger_gap": 15.0,
+    "tolerance": 2.0
+  },
+  "transcript": [
+    {
+      "start_time": 0.0,
+      "end_time": 30.0,
+      "text": "Welcome to kinematics — the study of motion. We describe motion using four key quantities: position, displacement, velocity, and acceleration."
+    },
+    {
+      "start_time": 30.0,
+      "end_time": 70.0,
+      "text": "Displacement is the change in position. It is a vector quantity, meaning it has both magnitude and direction. If you walk 5 m east then 3 m west, your displacement is 2 m east, even though you travelled 8 m total."
+    },
+    {
+      "start_time": 70.0,
+      "end_time": 110.0,
+      "text": "Average velocity is displacement divided by time. It differs from speed because velocity is a vector. If displacement is 30 m north over 6 seconds, average velocity is 5 m/s north."
+    },
+    {
+      "start_time": 110.0,
+      "end_time": 160.0,
+      "text": "Acceleration is the rate of change of velocity. If a car speeds up from 10 m/s to 30 m/s in 5 seconds, its acceleration is (30 - 10) / 5 = 4 m/s squared."
+    },
+    {
+      "start_time": 160.0,
+      "end_time": 220.0,
+      "text": "The kinematic equations relate displacement, velocity, acceleration, and time for uniform acceleration. The most useful is: s = ut + (1/2)at squared, where s is displacement, u is initial velocity, a is acceleration, and t is time."
+    },
+    {
+      "start_time": 220.0,
+      "end_time": 280.0,
+      "text": "Free fall is a classic application. Near Earth's surface, all objects fall with the same acceleration: g = 9.8 m/s squared downward, ignoring air resistance. If you drop an object from rest, after 3 seconds its velocity is 9.8 times 3 = 29.4 m/s downward."
+    },
+    {
+      "start_time": 280.0,
+      "end_time": 360.0,
+      "text": "Graphical analysis is powerful. A position-time graph's slope gives velocity. A velocity-time graph's slope gives acceleration, and its area gives displacement. These graphical relationships connect directly to the kinematic equations."
+    }
+  ],
+  "interventions": [
+    {
+      "id": "phys_1",
+      "trigger_time": 50.0,
+      "concept": "Displacement vs Distance",
+      "difficulty": "Easy",
+      "type": "single_choice",
+      "question": "A student walks 5 m east then 3 m west. What is the student's total displacement?",
+      "options": [
+        { "id": "opt_a", "text": "8 m east" },
+        { "id": "opt_b", "text": "2 m east" },
+        { "id": "opt_c", "text": "2 m west" },
+        { "id": "opt_d", "text": "8 m total" }
+      ],
+      "correct_answer": "opt_b",
+      "correct_feedback": "Correct! Displacement = final position - initial position = 5 - 3 = 2 m east.",
+      "incorrect_feedback": "Not quite. Displacement is the net change in position: 5 m east minus 3 m west = 2 m east."
+    },
+    {
+      "id": "phys_2",
+      "trigger_time": 90.0,
+      "concept": "Average Velocity",
+      "difficulty": "Medium",
+      "type": "single_choice",
+      "question": "If displacement is 30 m north in 6 seconds, what is average velocity?",
+      "options": [
+        { "id": "opt_a", "text": "5 m/s north" },
+        { "id": "opt_b", "text": "180 m/s north" },
+        { "id": "opt_c", "text": "5 m/s (magnitude only)" },
+        { "id": "opt_d", "text": "24 m/s north" }
+      ],
+      "correct_answer": "opt_a",
+      "correct_feedback": "Correct! Velocity = displacement / time = 30 / 6 = 5 m/s north.",
+      "incorrect_feedback": "Not quite. Average velocity = displacement / time. 30 m / 6 s = 5 m/s north."
+    },
+    {
+      "id": "phys_3",
+      "trigger_time": 135.0,
+      "concept": "Calculating Acceleration",
+      "difficulty": "Medium",
+      "type": "single_choice",
+      "question": "A car accelerates from 10 m/s to 30 m/s in 5 seconds. What is the acceleration?",
+      "options": [
+        { "id": "opt_a", "text": "2 m/s\u00b2" },
+        { "id": "opt_b", "text": "6 m/s\u00b2" },
+        { "id": "opt_c", "text": "4 m/s\u00b2" },
+        { "id": "opt_d", "text": "20 m/s\u00b2" }
+      ],
+      "correct_answer": "opt_c",
+      "correct_feedback": "Correct! a = \u0394v / t = (30 - 10) / 5 = 4 m/s\u00b2.",
+      "incorrect_feedback": "Not quite. Acceleration = change in velocity / time = (30 - 10) / 5 = 4 m/s\u00b2."
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "id": "linear_algebra_vectors",
+  "title": "Grade 12 Mathematics - Introduction to Vectors and Linear Algebra",
+  "subject": "Linear Algebra",
+  "grade": "Grade 12",
+  "duration_seconds": 300.0,
+  "video_url": "/media/math_sample_lecture.mp4",
+  "timing_config": {
+    "min_trigger_gap": 15.0,
+    "tolerance": 2.0
+  },
+  "transcript": [
+    {
+      "start_time": 0.0,
+      "end_time": 15.0,
+      "text": "Welcome to Grade 12 Linear Algebra. Today we introduce vectors, which are quantities that have both magnitude and direction."
+    },
+    {
+      "start_time": 15.0,
+      "end_time": 45.0,
+      "text": "A vector in 2D space is written as an ordered pair (x, y). For example, the vector (3, 4) points 3 units right and 4 units up. Its magnitude is sqrt(9 + 16) = 5."
+    },
+    {
+      "start_time": 45.0,
+      "end_time": 80.0,
+      "text": "To add two vectors, we add their components. If u = (2, 3) and v = (1, -1), then u + v = (3, 2). This is called component-wise addition."
+    },
+    {
+      "start_time": 80.0,
+      "end_time": 120.0,
+      "text": "Scalar multiplication scales a vector. Multiplying vector (2, 3) by scalar 3 gives (6, 9). This stretches the vector by a factor of 3 without changing its direction."
+    },
+    {
+      "start_time": 120.0,
+      "end_time": 165.0,
+      "text": "The dot product of two vectors u = (a, b) and v = (c, d) is u dot v = ac + bd. It is a scalar, not a vector. For u = (1, 2) and v = (3, 4), the dot product is 1*3 + 2*4 = 11."
+    },
+    {
+      "start_time": 165.0,
+      "end_time": 210.0,
+      "text": "Two vectors are orthogonal if their dot product is zero. For example, (1, 0) and (0, 1) have dot product 0, so they are perpendicular to each other."
+    },
+    {
+      "start_time": 210.0,
+      "end_time": 255.0,
+      "text": "A linear combination of vectors u and v is any expression of the form au + bv where a and b are scalars. The set of all such combinations is called the span of u and v."
+    },
+    {
+      "start_time": 255.0,
+      "end_time": 300.0,
+      "text": "Two vectors are linearly independent if neither is a scalar multiple of the other. In 2D, two linearly independent vectors span the entire plane."
+    }
+  ],
+  "interventions": []
+}

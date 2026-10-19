@@ -1,0 +1,7 @@
+fastapi>=0.135,<0.136
+google-genai>=2.3.0
+httpx>=0.28,<0.29
+pydantic-settings>=2.13,<3
+pytest>=9,<10
+uvicorn[standard]>=0.41,<0.42
+aiofiles

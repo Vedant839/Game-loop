@@ -1,0 +1,124 @@
+{
+  "id": "math_sample_lecture",
+  "title": "Grade 9 Mathematics - Linear Equations",
+  "subject": "Mathematics",
+  "grade": "Grade 9",
+  "duration_seconds": 300.0,
+  "video_url": "/media/math_sample_lecture.mp4",
+  "timing_config": {
+    "min_trigger_gap": 15.0,
+    "tolerance": 2.0
+  },
+  "transcript": [
+    {
+      "start_time": 0.0,
+      "end_time": 20.0,
+      "text": "Welcome to Grade 9 Mathematics. Today we explore linear equations in two variables. A linear equation can be written in slope-intercept form: y = mx + b, where m is the slope and b is the y-intercept."
+    },
+    {
+      "start_time": 20.0,
+      "end_time": 50.0,
+      "text": "The slope m tells you how steep the line is. For every 1 unit you move right along the x-axis, y changes by m units. A positive slope means the line goes up; negative slope means it goes down."
+    },
+    {
+      "start_time": 50.0,
+      "end_time": 90.0,
+      "text": "Let us look at the equation y = 2x + 3. Here the slope is 2 and the y-intercept is 3. When x is 0, y equals 3. When x is 1, y equals 5. When x is 2, y equals 7."
+    },
+    {
+      "start_time": 90.0,
+      "end_time": 130.0,
+      "text": "Now consider solving linear equations. To solve 2x + 4 = 10, subtract 4 from both sides to get 2x = 6, then divide both sides by 2 to get x = 3. The key principle is that whatever you do to one side, you must do to the other."
+    },
+    {
+      "start_time": 130.0,
+      "end_time": 170.0,
+      "text": "Standard form of a linear equation is Ax + By = C. For example, 3x + 2y = 12. You can convert to slope-intercept form by solving for y: 2y = 12 - 3x, then y = 6 - (3/2)x. The slope is -3/2 and the y-intercept is 6."
+    },
+    {
+      "start_time": 170.0,
+      "end_time": 210.0,
+      "text": "When two linear equations share the same solution, they intersect at a single point. This is called a system of equations. You can solve it by substitution: substitute one equation into the other to find the intersection."
+    },
+    {
+      "start_time": 210.0,
+      "end_time": 260.0,
+      "text": "Let us solve the system: y = x + 1 and y = 2x - 3. Set them equal: x + 1 = 2x - 3. Subtract x from both sides: 1 = x - 3. Add 3: x = 4. Then y = 4 + 1 = 5. The solution is (4, 5)."
+    },
+    {
+      "start_time": 260.0,
+      "end_time": 300.0,
+      "text": "In summary, linear equations model real-world relationships with constant rates of change. The slope represents the rate of change, and the y-intercept represents the initial value. Mastering these ideas is foundational for all future algebra."
+    }
+  ],
+  "interventions": [
+    {
+      "id": "int_1",
+      "trigger_time": 25.0,
+      "concept": "Slope and Steepness",
+      "difficulty": "Easy",
+      "type": "single_choice",
+      "question": "In the equation y = mx + b, what does m represent?",
+      "options": [
+        { "id": "opt_a", "text": "The slope — how steeply the line rises or falls" },
+        { "id": "opt_b", "text": "The y-intercept — where the line crosses the y-axis" },
+        { "id": "opt_c", "text": "The x-intercept — where the line crosses the x-axis" },
+        { "id": "opt_d", "text": "The length of the line segment" }
+      ],
+      "correct_answer": "opt_a",
+      "correct_feedback": "Correct! m is the slope and tells you the rate of change — how much y changes per unit of x.",
+      "incorrect_feedback": "Incorrect. In y = mx + b, m is the slope — the rate of change. b is the y-intercept."
+    },
+    {
+      "id": "int_2",
+      "trigger_time": 55.0,
+      "concept": "Reading Slope-Intercept Form",
+      "difficulty": "Easy",
+      "type": "single_choice",
+      "question": "For the equation y = 2x + 3, what is the value of y when x = 2?",
+      "options": [
+        { "id": "opt_a", "text": "5" },
+        { "id": "opt_b", "text": "7" },
+        { "id": "opt_c", "text": "9" },
+        { "id": "opt_d", "text": "3" }
+      ],
+      "correct_answer": "opt_b",
+      "correct_feedback": "Correct! y = 2(2) + 3 = 4 + 3 = 7.",
+      "incorrect_feedback": "Not quite. Substitute x = 2 into y = 2x + 3: y = 2(2) + 3 = 7."
+    },
+    {
+      "id": "int_3",
+      "trigger_time": 110.0,
+      "concept": "Solving Linear Equations",
+      "difficulty": "Medium",
+      "type": "multiple_selection",
+      "question": "Which two operations are used to solve 2x + 4 = 10 for x? (Select both.)",
+      "options": [
+        { "id": "opt_add3",  "text": "Add 3 to both sides" },
+        { "id": "opt_sub3", "text": "Subtract 4 from both sides" },
+        { "id": "opt_div2", "text": "Divide both sides by 2" },
+        { "id": "opt_mul2", "text": "Multiply both sides by 2" }
+      ],
+      "correct_answer": ["opt_sub3", "opt_div2"],
+      "correct_feedback": "Correct! First subtract 4 to get 2x = 6, then divide by 2 to get x = 3.",
+      "incorrect_feedback": "Not quite. The two steps are: subtract 4 from both sides, then divide both sides by 2."
+    },
+    {
+      "id": "int_4",
+      "trigger_time": 145.0,
+      "concept": "Standard Form Conversion",
+      "difficulty": "Hard",
+      "type": "single_choice",
+      "question": "The equation 3x + 2y = 12 is converted to slope-intercept form. What is the slope?",
+      "options": [
+        { "id": "opt_a", "text": "3" },
+        { "id": "opt_b", "text": "2" },
+        { "id": "opt_c", "text": "-3/2" },
+        { "id": "opt_d", "text": "6" }
+      ],
+      "correct_answer": "opt_c",
+      "correct_feedback": "Correct! Solving for y: 2y = 12 - 3x → y = 6 - (3/2)x. Slope = -3/2.",
+      "incorrect_feedback": "Not quite. Solve 3x + 2y = 12 for y: y = 6 - (3/2)x. The slope is the coefficient of x, which is -3/2."
+    }
+  ]
+}

@@ -1,0 +1,214 @@
+{
+  "id": "python_basics_lists",
+  "title": "Python Fundamentals - Lists, Loops, and References",
+  "subject": "Computer Science",
+  "grade": "Grade 10",
+  "duration_seconds": 360.0,
+  "video_url": "/media/sample_lecture_linux.mp4",
+  "timing_config": {
+    "min_trigger_gap": 30.0,
+    "tolerance": 3.0
+  },
+  "transcript": [
+    {
+      "start_time": 0.0,
+      "end_time": 40.0,
+      "text": "Welcome to Python fundamentals. A list is an ordered, mutable collection of items. You create one with square brackets: fruits = ['apple', 'banana', 'cherry']. Lists are zero-indexed — fruits[0] is 'apple'."
+    },
+    {
+      "start_time": 40.0,
+      "end_time": 85.0,
+      "text": "The append method adds an item to the end of a list. If a = [1, 2, 3] and you call a.append(4), the list becomes [1, 2, 3, 4]. But here is the critical insight: if b = a, then b and a point to the SAME list in memory."
+    },
+    {
+      "start_time": 85.0,
+      "end_time": 130.0,
+      "text": "This is the reference semantics of Python. Unlike primitive values, lists are not copied when assigned. If you modify a, the change is visible through b because they are both names for the same object. To create an independent copy, use b = a.copy() or b = list(a)."
+    },
+    {
+      "start_time": 130.0,
+      "end_time": 185.0,
+      "text": "A for loop iterates over each element in a list. For i in fruits: print(i) prints each fruit on a new line. You can also use range: for i in range(3): print(i) prints 0, 1, 2. The range is exclusive of the stop value."
+    },
+    {
+      "start_time": 185.0,
+      "end_time": 240.0,
+      "text": "List comprehensions are a concise way to build lists. squares = [x**2 for x in range(5)] creates [0, 1, 4, 9, 16]. You can add conditions: evens = [x for x in range(10) if x % 2 == 0] gives [0, 2, 4, 6, 8]."
+    },
+    {
+      "start_time": 240.0,
+      "end_time": 300.0,
+      "text": "Functions let you name and reuse a block of code. def greet(name): return 'Hello, ' + name. Calling greet('Alice') returns 'Hello, Alice'. Parameters are local to the function — changes to them do not affect variables outside."
+    },
+    {
+      "start_time": 300.0,
+      "end_time": 360.0,
+      "text": "Putting it all together: you can write a function that uses a list, a loop, and a comprehension to compute statistics, filter data, or transform sequences. Python's clean syntax makes these patterns readable and reusable."
+    }
+  ],
+  "interventions": [
+    {
+      "id": "py_1",
+      "trigger_time": 65.0,
+      "concept": "List Reference Semantics",
+      "difficulty": "Medium",
+      "type": "predict_and_verify",
+      "question": "Predict what this code prints, then run it to check.",
+      "hypothesis_prompt": "Look at the code below carefully. What will be printed on the last line?",
+      "hypothesis_options": [
+        { "id": "h_a", "text": "[1, 2, 3]  — a is unchanged because b is a copy" },
+        { "id": "h_b", "text": "[1, 2, 3, 4]  — both a and b point to the same list" },
+        { "id": "h_c", "text": "Error — you cannot append after assignment" },
+        { "id": "h_d", "text": "[1, 2, 3, 4, 4]  — append is called twice" }
+      ],
+      "sandbox_config": {
+        "environment": "python_wasm",
+        "initial_code": "a = [1, 2, 3]\nb = a\nb.append(4)\nprint(a)",
+        "solution_code": "a = [1, 2, 3]\nb = a\nb.append(4)\nprint(a)  # prints [1, 2, 3, 4]",
+        "test_cases": [
+          {
+            "name": "Output includes 4",
+            "expected_output": "[1, 2, 3, 4]"
+          }
+        ],
+        "hints": [
+          "In Python, b = a does NOT create a copy.",
+          "Both a and b refer to the same list object in memory.",
+          "Any mutation through b also changes what you see through a."
+        ]
+      },
+      "correct_answer": "h_b",
+      "correct_feedback": "Correct! b = a makes b another name for the same list. Appending through b also changes a. This is Python's reference semantics.",
+      "incorrect_feedback": "Not quite. In Python, assignment does not copy a list — it creates a second reference to the same object. Run the code to see [1, 2, 3, 4].",
+      "variants": {
+        "1": {
+          "tier": 1,
+          "prompt": "The code below appends to list b. What does print(a) show? Choose from the options, then run the code to verify.",
+          "hypothesis_prompt": "What will print(a) output after b.append(4)?",
+          "hypothesis_options": [
+            { "id": "h_a", "text": "[1, 2, 3]  — a is unchanged" },
+            { "id": "h_b", "text": "[1, 2, 3, 4]  — a and b are the same list" }
+          ],
+          "sandbox_config": {
+            "environment": "python_wasm",
+            "initial_code": "a = [1, 2, 3]\nb = a          # b is an alias, not a copy\nb.append(4)\nprint(a)       # what shows here?",
+            "test_cases": [
+              { "name": "Correct output", "expected_output": "[1, 2, 3, 4]" }
+            ],
+            "hints": ["b = a makes b point to the same memory as a."]
+          },
+          "correct_answer": "h_b",
+          "correct_feedback": "Correct! They share the same list — changes through b are visible via a.",
+          "incorrect_feedback": "Not quite — b = a shares the same list. Run the code and you will see [1, 2, 3, 4]."
+        },
+        "2": {
+          "tier": 2,
+          "prompt": "Predict and verify: what does print(a) show after b.append(4)? Then modify the code so that a stays [1, 2, 3] even after b.append(4).",
+          "hypothesis_prompt": "What will print(a) output?",
+          "hypothesis_options": [
+            { "id": "h_a", "text": "[1, 2, 3]" },
+            { "id": "h_b", "text": "[1, 2, 3, 4]" },
+            { "id": "h_c", "text": "Error" }
+          ],
+          "sandbox_config": {
+            "environment": "python_wasm",
+            "initial_code": "a = [1, 2, 3]\nb = a\nb.append(4)\nprint(a)\n\n# Now make a stay [1, 2, 3] after b.append(4)\n# Hint: look up list.copy()",
+            "test_cases": [
+              { "name": "a unchanged", "expected_output": "[1, 2, 3]" }
+            ],
+            "hints": ["Use b = a.copy() to create an independent copy."]
+          },
+          "correct_answer": "h_b",
+          "correct_feedback": "Correct — and now you should have made b a copy so a stays independent.",
+          "incorrect_feedback": "Not quite. First verify: print(a) shows [1, 2, 3, 4]. Then use b = a.copy() to fix it."
+        },
+        "3": {
+          "tier": 3,
+          "prompt": "Diagnose the bug: this function is supposed to return a sorted version of the input without modifying the original. But the original gets sorted too. Find and fix the bug.",
+          "hypothesis_prompt": "Why does the original list get sorted?",
+          "hypothesis_options": [
+            { "id": "h_a", "text": "list.sort() returns a sorted copy, so the original is safe" },
+            { "id": "h_b", "text": "list.sort() sorts in place — you need to copy first" },
+            { "id": "h_c", "text": "The function modifies a global variable" }
+          ],
+          "sandbox_config": {
+            "environment": "python_wasm",
+            "initial_code": "def sorted_copy(lst):\n    lst.sort()   # BUG: what does this actually do?\n    return lst\n\noriginal = [3, 1, 4, 1, 5]\nresult = sorted_copy(original)\nprint('result:', result)\nprint('original:', original)  # should still be [3, 1, 4, 1, 5]",
+            "solution_code": "def sorted_copy(lst):\n    copy = lst.copy()\n    copy.sort()\n    return copy\n\noriginal = [3, 1, 4, 1, 5]\nresult = sorted_copy(original)\nprint('result:', result)\nprint('original:', original)",
+            "test_cases": [
+              { "name": "Original unchanged", "expected_output": "original: [3, 1, 4, 1, 5]" }
+            ],
+            "hints": [
+              "list.sort() sorts in-place and returns None.",
+              "Use sorted(lst) instead, or copy the list first."
+            ]
+          },
+          "correct_answer": "h_b",
+          "correct_feedback": "Correct! list.sort() mutates in place. Use copy = lst.copy(); copy.sort() or return sorted(lst).",
+          "incorrect_feedback": "Not quite. list.sort() modifies the original list directly — it does not return a copy."
+        }
+      }
+    },
+    {
+      "id": "py_2",
+      "trigger_time": 160.0,
+      "concept": "For Loops and range()",
+      "difficulty": "Easy",
+      "type": "predict_and_verify",
+      "question": "What does this loop print? Predict first, then run it.",
+      "hypothesis_prompt": "How many numbers will be printed, and what are they?",
+      "hypothesis_options": [
+        { "id": "h_a", "text": "0, 1, 2, 3  — range(4) includes 0 through 3" },
+        { "id": "h_b", "text": "1, 2, 3, 4  — range starts at 1" },
+        { "id": "h_c", "text": "0, 1, 2, 3, 4  — range(4) includes 4" },
+        { "id": "h_d", "text": "4, 3, 2, 1  — it counts down" }
+      ],
+      "sandbox_config": {
+        "environment": "python_wasm",
+        "initial_code": "for i in range(4):\n    print(i)",
+        "test_cases": [
+          { "name": "Correct sequence", "expected_output": "0\n1\n2\n3" }
+        ],
+        "hints": [
+          "range(n) generates numbers from 0 up to (but not including) n."
+        ]
+      },
+      "correct_answer": "h_a",
+      "correct_feedback": "Correct! range(4) produces 0, 1, 2, 3. The stop value (4) is exclusive.",
+      "incorrect_feedback": "Not quite. range(n) starts at 0 and goes up to n-1. So range(4) gives 0, 1, 2, 3.",
+      "variants": {}
+    },
+    {
+      "id": "py_3",
+      "trigger_time": 210.0,
+      "concept": "List Comprehensions",
+      "difficulty": "Hard",
+      "type": "inquiry_sandbox",
+      "question": "Investigate: use a list comprehension to build a list of squares of even numbers from 0 to 9.",
+      "hypothesis_prompt": "How many items will be in the final list?",
+      "hypothesis_options": [
+        { "id": "h_a", "text": "5 items — the even numbers are 0, 2, 4, 6, 8" },
+        { "id": "h_b", "text": "10 items — all numbers 0 to 9" },
+        { "id": "h_c", "text": "4 items — excluding 0" }
+      ],
+      "sandbox_config": {
+        "environment": "python_wasm",
+        "initial_code": "# Build the list of squares of even numbers from 0 to 9\n# Your answer should look like: [0, 4, 16, 36, 64]\n\nresult = []\nprint(result)\nprint('Length:', len(result))",
+        "solution_code": "result = [x**2 for x in range(10) if x % 2 == 0]\nprint(result)\nprint('Length:', len(result))",
+        "test_cases": [
+          { "name": "Correct squares", "expected_output": "[0, 4, 16, 36, 64]" },
+          { "name": "Correct length", "expected_output": "Length: 5" }
+        ],
+        "hints": [
+          "A list comprehension: [expression for item in iterable if condition]",
+          "x % 2 == 0 checks if x is even.",
+          "x**2 computes x squared."
+        ]
+      },
+      "correct_answer": "h_a",
+      "correct_feedback": "Correct! Even numbers 0-9 are 0,2,4,6,8 — that is 5 items. Their squares: [0, 4, 16, 36, 64].",
+      "incorrect_feedback": "Not quite. Count the even numbers in range(10): 0, 2, 4, 6, 8 — that is 5 items.",
+      "variants": {}
+    }
+  ]
+}

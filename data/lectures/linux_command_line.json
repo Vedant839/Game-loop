@@ -1,0 +1,233 @@
+{
+  "id": "linux_command_line",
+  "title": "Linux in 100 Seconds: Operating System Basics & Terminal Commands",
+  "subject": "Operating Systems & Linux",
+  "grade": "Grade 11",
+  "duration_seconds": 161.0,
+  "video_url": "/media/sample_lecture_linux.mp4",
+  "timing_config": {
+    "min_trigger_gap": 20.0,
+    "tolerance": 2.5
+  },
+  "transcript": [
+    {
+      "start_time": 0.0,
+      "end_time": 5.9,
+      "text": "Linux, an open source operating system that makes it possible for humans to play with computers."
+    },
+    {
+      "start_time": 5.9,
+      "end_time": 10.1,
+      "text": "It was created in 1991 by University of Helsinki student Linus Torvalds."
+    },
+    {
+      "start_time": 10.1,
+      "end_time": 16.2,
+      "text": "His goal was to create a free version of the MINIX operating system, which itself was based on Unix."
+    },
+    {
+      "start_time": 16.2,
+      "end_time": 23.4,
+      "text": "Today, it's used everywhere, like the vast majority of web servers, embedded apps like your smart TV, mobile devices running Android,"
+    },
+    {
+      "start_time": 23.4,
+      "end_time": 29.8,
+      "text": "and is by far the best choice for your personal computer, with many different distros to choose from, like Debian, Arch, and Fedora, just to name a few."
+    },
+    {
+      "start_time": 29.8,
+      "end_time": 38.3,
+      "text": "Just like Windows or macOS, Linux is an operating system that manages a computer's memory and processes, allowing hardware to communicate with software."
+    },
+    {
+      "start_time": 38.3,
+      "end_time": 42.7,
+      "text": "When you fire up a Linux machine, a bootloader will first put the system into memory."
+    },
+    {
+      "start_time": 42.7,
+      "end_time": 47.3,
+      "text": "At its core, we have the kernel, which is like a seed from which the rest of the operating system grows."
+    },
+    {
+      "start_time": 47.3,
+      "end_time": 53.6,
+      "text": "It's divided into multiple smaller subsystems, like a process scheduler, device drivers, and a memory manager."
+    },
+    {
+      "start_time": 53.6,
+      "end_time": 62.4,
+      "text": "They're exposed with the system call interface, which itself is wrapped with the C standard library, which provides an API that user applications can interact with."
+    },
+    {
+      "start_time": 62.4,
+      "end_time": 69.1,
+      "text": "Now beyond the kernel, we have applications that make the OS usable for humans, which are provided primarily via the GNU Project,"
+    },
+    {
+      "start_time": 69.1,
+      "end_time": 76.5,
+      "text": "like a shell to interact with the kernel from the command line, windowing systems on desktop, developer utilities, and countless other applications."
+    },
+    {
+      "start_time": 76.5,
+      "end_time": 83.8,
+      "text": "To get started, install your favorite Linux distro, open the terminal, and notice how we're logged in as the root user on a specific Linux machine."
+    },
+    {
+      "start_time": 83.8,
+      "end_time": 88.3,
+      "text": "Currently, we're in the home directory of the root user, which is shortened to this tilde character."
+    },
+    {
+      "start_time": 88.3,
+      "end_time": 91.5,
+      "text": "Show its full name with the print working directory command."
+    },
+    {
+      "start_time": 91.5,
+      "end_time": 95.3,
+      "text": "Now use change directories with a double period to go to the root of the file system."
+    },
+    {
+      "start_time": 95.3,
+      "end_time": 99.8,
+      "text": "Use the ls command to print all the subdirectories here. These are your critical system files."
+    },
+    {
+      "start_time": 99.8,
+      "end_time": 102.3,
+      "text": "Let's go back home with cd tilde."
+    },
+    {
+      "start_time": 102.3,
+      "end_time": 107.5,
+      "text": "Now create a new file with touch, then edit it from the terminal with a tool like vi, Vim, Nano, or Emacs."
+    },
+    {
+      "start_time": 107.5,
+      "end_time": 113.8,
+      "text": "In Vim, type i to insert, write your screenplay, hit escape, then :wq to write it to the file system."
+    },
+    {
+      "start_time": 113.8,
+      "end_time": 116.3,
+      "text": "Now use the cat command to read the file."
+    },
+    {
+      "start_time": 116.3,
+      "end_time": 121.7,
+      "text": "If it's really big, use grep to find all the lines in that file that contain a search term or pattern."
+    },
+    {
+      "start_time": 121.7,
+      "end_time": 125.7,
+      "text": "If we want to see how big that file is, we can enter the disk usage command."
+    },
+    {
+      "start_time": 125.7,
+      "end_time": 132.3,
+      "text": "Every file has an owner and a set of permissions assigned to it. We can change the owner with the chown command, or its permissions with chmod."
+    },
+    {
+      "start_time": 132.3,
+      "end_time": 138.8,
+      "text": "Now, if your current user doesn't have proper permissions, you can put superuser do in front of any command to run it with elevated privileges."
+    },
+    {
+      "start_time": 138.8,
+      "end_time": 147.8,
+      "text": "To install new software on this machine, we can use a package manager like Advanced Package Tool, which will retrieve the code from the cloud and place it in the proper location on your system."
+    },
+    {
+      "start_time": 147.8,
+      "end_time": 153.6,
+      "text": "We just went through a bunch of commands. Let's recap everything with history. This has been Linux in 100 seconds."
+    },
+    {
+      "start_time": 153.6,
+      "end_time": 161.0,
+      "text": "If you want to see more short videos like this, hit the like button and subscribe. Thanks for watching, and I will see you in the next one."
+    }
+  ],
+  "interventions": [
+    {
+      "id": "linux_int_1",
+      "trigger_time": 48.0,
+      "concept": "The Linux Kernel Core",
+      "difficulty": "Easy",
+      "type": "single_choice",
+      "question": "According to the video, what is the role of the Linux kernel at the center of the operating system?",
+      "options": [
+        { "id": "opt_a", "text": "It acts as a seed that manages memory, processes, and device drivers" },
+        { "id": "opt_b", "text": "It is solely a graphical window manager for desktop apps" },
+        { "id": "opt_c", "text": "It is a package manager like APT to install software" },
+        { "id": "opt_d", "text": "It is an optical disc bootloader" }
+      ],
+      "correct_answer": "opt_a",
+      "correct_feedback": "Correct! The kernel is divided into subsystems like the process scheduler, device drivers, and memory manager.",
+      "incorrect_feedback": "Not quite. The kernel is the core of the OS managing memory, processes, and hardware communication."
+    },
+    {
+      "id": "linux_int_2",
+      "trigger_time": 95.0,
+      "concept": "File System Navigation",
+      "difficulty": "Medium",
+      "type": "single_choice",
+      "question": "Which command was demonstrated to print your current directory path, and which to go up to the parent/root directory?",
+      "options": [
+        { "id": "opt_a", "text": "pwd to print working directory, and cd .. to move up" },
+        { "id": "opt_b", "text": "ls to print working directory, and touch .. to move up" },
+        { "id": "opt_c", "text": "cat to print working directory, and chmod .. to move up" },
+        { "id": "opt_d", "text": "grep to print working directory, and du .. to move up" }
+      ],
+      "correct_answer": "opt_a",
+      "correct_feedback": "Correct! pwd prints the current working directory, and cd .. navigates to the parent directory.",
+      "incorrect_feedback": "Not quite. 'pwd' stands for print working directory, and 'cd ..' moves up a directory."
+    },
+    {
+      "id": "linux_int_3",
+      "trigger_time": 118.0,
+      "concept": "Text Inspection & Searching",
+      "difficulty": "Medium",
+      "type": "predict_and_verify",
+      "question": "Predict which tool searches for text patterns within a large file, then verify in sandbox.",
+      "hypothesis_prompt": "If a screenplay file is huge and you need to find every line containing a keyword, what command should you use?",
+      "hypothesis_options": [
+        { "id": "h_a", "text": "grep — searches for patterns inside files" },
+        { "id": "h_b", "text": "touch — changes modification timestamp" },
+        { "id": "h_c", "text": "cd — changes directory" },
+        { "id": "h_d", "text": "pwd — prints working directory" }
+      ],
+      "sandbox_config": {
+        "environment": "python_wasm",
+        "initial_code": "# Simulating file search:\nlines = ['Scene 1: Interior', 'Character: Hello Linux', 'Scene 2: Exterior']\npattern = 'Linux'\nmatches = [l for l in lines if pattern in l]\nprint('Matches:', len(matches))\nprint(matches[0])",
+        "test_cases": [
+          { "name": "Finds matching line", "expected_output": "Matches: 1" }
+        ],
+        "hints": ["grep stands for Global Regular Expression Print."]
+      },
+      "correct_answer": "h_a",
+      "correct_feedback": "Correct! grep filters and prints lines matching a pattern or search term.",
+      "incorrect_feedback": "Not quite. cat prints the whole file, while grep searches for matching lines."
+    },
+    {
+      "id": "linux_int_4",
+      "trigger_time": 145.0,
+      "concept": "Permissions and Elevation",
+      "difficulty": "Hard",
+      "type": "multiple_selection",
+      "question": "Which two commands manage file permissions and run commands with elevated administrative privileges? (Select both.)",
+      "options": [
+        { "id": "opt_chmod", "text": "chmod — change file mode/permissions" },
+        { "id": "opt_sudo",  "text": "sudo — superuser do for elevated privileges" },
+        { "id": "opt_vim",   "text": "vim — text editor" },
+        { "id": "opt_touch", "text": "touch — file creator" }
+      ],
+      "correct_answer": ["opt_chmod", "opt_sudo"],
+      "correct_feedback": "Correct! chmod modifies read/write/execute permissions, and sudo executes commands as superuser.",
+      "incorrect_feedback": "Not quite. chmod changes permissions and sudo runs commands with root/superuser privileges."
+    }
+  ]
+}
