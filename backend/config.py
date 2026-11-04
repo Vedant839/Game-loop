@@ -36,6 +36,10 @@ class Settings(BaseSettings):
         default=PROJECT_ROOT / "data" / "lectures",
         validation_alias=AliasChoices("lectures_dir", "GAME_LOOP_LECTURES_DIR"),
     )
+    db_path: Path = Field(
+        default=PROJECT_ROOT / "data" / "game_loop.db",
+        validation_alias=AliasChoices("db_path", "GAME_LOOP_DB_PATH"),
+    )
 
     @property
     def project_root(self) -> Path:

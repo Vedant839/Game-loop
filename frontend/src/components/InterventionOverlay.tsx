@@ -4,6 +4,7 @@ import type {
   ActiveInterventionPayload,
   EvaluationResult,
   InquiryExperimentSubmission,
+  OpenEndedSubmissionResponse,
   SandboxConfig,
 } from "../types";
 
@@ -11,6 +12,9 @@ interface Props {
   intervention: ActiveInterventionPayload;
   onSubmit: (answer: string | string[]) => Promise<EvaluationResult>;
   onSubmitExperiment?: (submission: InquiryExperimentSubmission) => Promise<EvaluationResult>;
+  onSubmitOpenEnded?: (answer: string) => Promise<OpenEndedSubmissionResponse>;
+  onSelfAssess?: (submissionId: string, correct: boolean) => Promise<void>;
+  onSkip?: () => Promise<void>;
   onFeedbackComplete: () => void;
 }
 
@@ -18,10 +22,14 @@ export default function InterventionOverlay({
   intervention,
   onSubmit,
   onSubmitExperiment,
+  onSubmitOpenEnded,
+  onSelfAssess,
+  onSkip,
   onFeedbackComplete,
 }: Props) {
   const isInquiry =
     intervention.type === "predict_and_verify" || intervention.type === "inquiry_sandbox";
+  const isOpenEnded = intervention.type === "open_ended";
 
   // MCQ state
   const [selectedSingle, setSelectedSingle] = useState<string>("");
@@ -37,12 +45,21 @@ export default function InterventionOverlay({
   const [executionReport, setExecutionReport] = useState<ExecutionReport | null>(null);
   const [showHints, setShowHints] = useState<boolean>(false);
 
+  // Open-ended state
+  const [openEndedText, setOpenEndedText] = useState<string>("");
+  const [isEvaluatingOpenEnded, setIsEvaluatingOpenEnded] = useState<boolean>(false);
+  const [openEndedResponse, setOpenEndedResponse] = useState<OpenEndedSubmissionResponse | null>(null);
+  const [isSelfAssessing, setIsSelfAssessing] = useState<boolean>(false);
+
   // Common state
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [isSkipping, setIsSkipping] = useState<boolean>(false);
   const [evaluationResult, setEvaluationResult] = useState<EvaluationResult | null>(null);
   const [countdown, setCountdown] = useState<number>(4);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  const policy = intervention.policy ?? "skippable";
+  const isSkippable = policy === "skippable";
   const isSingleChoice = intervention.type === "single_choice";
   const hasMcqSelection = isSingleChoice
     ? selectedSingle.length > 0
@@ -53,6 +70,19 @@ export default function InterventionOverlay({
     setSelectedMultiple((prev) =>
       prev.includes(optionId) ? prev.filter((id) => id !== optionId) : [...prev, optionId]
     );
+  };
+
+  const handleSkip = async () => {
+    if (!onSkip || isSkipping || isSubmitting) return;
+    setIsSkipping(true);
+    setSubmitError(null);
+    try {
+      await onSkip();
+      onFeedbackComplete();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Failed to skip.");
+      setIsSkipping(false);
+    }
   };
 
   const handleMcqSubmit = async (e: React.FormEvent) => {
@@ -68,6 +98,78 @@ export default function InterventionOverlay({
       setEvaluationResult(result);
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "Submission failed.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleOpenEndedSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!openEndedText.trim() || isSubmitting || evaluationResult) return;
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      if (onSubmitOpenEnded) {
+        setIsEvaluatingOpenEnded(true);
+        const resp = await onSubmitOpenEnded(openEndedText);
+        setOpenEndedResponse(resp);
+
+        if (resp.resumption_policy === "immediate_optimistic") {
+          setEvaluationResult({
+            is_correct: resp.is_correct ?? true,
+            feedback: resp.formative_feedback ?? "Your conceptual explanation has been recorded and is being evaluated.",
+            submitted_answer: openEndedText,
+            session_state: resp.session_state ?? intervention.session_state,
+          });
+          setIsEvaluatingOpenEnded(false);
+        } else {
+          // wait_for_result
+          if (resp.status === "completed") {
+            setEvaluationResult({
+              is_correct: resp.is_correct ?? true,
+              feedback: resp.formative_feedback ?? "Evaluation complete.",
+              submitted_answer: openEndedText,
+              session_state: resp.session_state ?? intervention.session_state,
+            });
+            setIsEvaluatingOpenEnded(false);
+          } else {
+            // Wait up to 5 seconds before offering self-assessment fallback
+            setTimeout(() => {
+              setIsSelfAssessing(true);
+              setIsEvaluatingOpenEnded(false);
+            }, 5000);
+          }
+        }
+      } else {
+        const result = await onSubmit(openEndedText);
+        setEvaluationResult(result);
+      }
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Submission failed.");
+      setIsEvaluatingOpenEnded(false);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleSelfAssessClick = async (correct: boolean) => {
+    if (!openEndedResponse || !onSelfAssess) return;
+    setIsSubmitting(true);
+    try {
+      await onSelfAssess(openEndedResponse.submission_id, correct);
+      setEvaluationResult({
+        is_correct: correct,
+        feedback: correct
+          ? "Self-assessment recorded. Verified alignment with reference rubric."
+          : "Self-assessment recorded. Core misconceptions identified for revision.",
+        submitted_answer: openEndedText,
+        session_state: intervention.session_state,
+      });
+      setIsSelfAssessing(false);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Self-assessment failed.");
     } finally {
       setIsSubmitting(false);
     }
@@ -163,11 +265,16 @@ export default function InterventionOverlay({
           {tierBadgeLabel && (
             <span className="badge tier-badge">{tierBadgeLabel}</span>
           )}
+          <span className={`policy-badge ${policy}`}>
+            {isSkippable ? "Skippable" : "Required"}
+          </span>
           <span className="badge type-badge">
             {isInquiry
               ? intervention.type === "predict_and_verify"
                 ? "Predict & Verify"
                 : "Inquiry Sandbox"
+              : isOpenEnded
+              ? "Open-Ended Reasoning"
               : isSingleChoice
               ? "Single Choice"
               : "Multiple Selection"}
@@ -205,6 +312,113 @@ export default function InterventionOverlay({
               </div>
             )}
             <p className="countdown-text">Resuming video in {countdown}s...</p>
+          </div>
+        ) : isOpenEnded ? (
+          /* OPEN-ENDED REASONING / PROOFS WORKFLOW */
+          <div className="open-ended-container">
+            {isEvaluatingOpenEnded ? (
+              <div className="evaluating-card">
+                <div className="evaluating-spinner" />
+                <h4>Evaluating your conceptual reasoning...</h4>
+                <p className="feedback-text">
+                  Our pedagogical evaluator is analyzing your explanation against key rubric concepts.
+                </p>
+              </div>
+            ) : isSelfAssessing ? (
+              <div className="self-assess-card">
+                <h4>Self-Assessment: Reference Rubric</h4>
+                <p className="feedback-text">
+                  Compare your response with the expert rubric below:
+                </p>
+                <div className="rubric-reference">
+                  <h5>Reference Explanation</h5>
+                  <p>
+                    {intervention.rubric?.reference_answer ||
+                      "Rotating 180 degrees around the midpoint of the transversal segment maps alternate interior angles directly onto each other."}
+                  </p>
+                  {intervention.rubric?.key_concepts && intervention.rubric.key_concepts.length > 0 && (
+                    <div className="key-concepts-list">
+                      {intervention.rubric.key_concepts.map((concept) => (
+                        <span key={concept} className="concept-pill">
+                          {concept}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", margin: "0.5rem 0" }}>
+                  Did your response explain these core mathematical concepts?
+                </p>
+                <div className="self-assess-buttons">
+                  <button
+                    type="button"
+                    className="self-assess-pass-btn"
+                    onClick={() => handleSelfAssessClick(true)}
+                    disabled={isSubmitting}
+                  >
+                    ✓ Covered Key Concepts
+                  </button>
+                  <button
+                    type="button"
+                    className="self-assess-fail-btn"
+                    onClick={() => handleSelfAssessClick(false)}
+                    disabled={isSubmitting}
+                  >
+                    ✗ Missed Key Concepts
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleOpenEndedSubmit} className="open-ended-form">
+                <label htmlFor="open-ended-input" className="sr-only">
+                  Your Explanation
+                </label>
+                <textarea
+                  id="open-ended-input"
+                  className="open-ended-textarea"
+                  placeholder="Explain your mathematical or conceptual reasoning step-by-step..."
+                  value={openEndedText}
+                  onChange={(e) => setOpenEndedText(e.target.value)}
+                  disabled={isSubmitting}
+                  rows={5}
+                />
+                <div className="textarea-footer">
+                  <span>
+                    {openEndedText.trim()
+                      ? `${openEndedText.trim().split(/\s+/).length} words`
+                      : "0 words"}{" "}
+                    • {openEndedText.length} characters
+                  </span>
+                  {intervention.rubric?.passing_score && (
+                    <span>
+                      Passing threshold: {(intervention.rubric.passing_score * 100).toFixed(0)}%
+                    </span>
+                  )}
+                </div>
+
+                {submitError && <p className="error-message">{submitError}</p>}
+
+                <div className="checkpoint-actions">
+                  {isSkippable && (
+                    <button
+                      type="button"
+                      className="skip-button"
+                      onClick={handleSkip}
+                      disabled={isSubmitting || isSkipping}
+                    >
+                      Skip Checkpoint
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    className="submit-button"
+                    disabled={!openEndedText.trim() || isSubmitting}
+                  >
+                    {isSubmitting ? "Submitting..." : "Submit for Evaluation"}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         ) : isInquiry ? (
           /* INQUIRY SANDBOX WORKFLOW */
@@ -250,7 +464,7 @@ export default function InterventionOverlay({
                     >
                       <input
                         type="radio"
-                        name="hypothesis-choice"
+                        name="inquiry-hypothesis"
                         value={opt.id}
                         checked={selectedHypothesis === opt.id}
                         onChange={() => setSelectedHypothesis(opt.id)}
@@ -260,7 +474,17 @@ export default function InterventionOverlay({
                   ))}
                 </div>
 
-                <div className="inquiry-actions">
+                <div className="checkpoint-actions">
+                  {isSkippable && (
+                    <button
+                      type="button"
+                      className="skip-button"
+                      onClick={handleSkip}
+                      disabled={isSubmitting || isSkipping}
+                    >
+                      Skip Checkpoint
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="submit-button"
@@ -273,45 +497,63 @@ export default function InterventionOverlay({
               </div>
             ) : (
               <form onSubmit={handleInquirySubmit} className="experiment-step">
-                <div className="sandbox-workspace">
-                  <div className="editor-panel">
-                    <div className="panel-header">
-                      <span>Python Sandbox</span>
-                      <button
-                        type="button"
-                        className="hint-toggle-btn"
-                        onClick={() => setShowHints((prev) => !prev)}
-                      >
-                        {showHints ? "Hide Hints" : "Need a Hint?"}
-                      </button>
-                    </div>
+                <div className="hypothesis-reminder">
+                  <span>Locked Hypothesis: </span>
+                  <strong>
+                    {hypothesisOptions.find((o) => o.id === selectedHypothesis)?.text ??
+                      selectedHypothesis}
+                  </strong>
+                </div>
 
-                    {showHints && intervention.sandbox_config?.hints && (
-                      <ul className="hints-list">
-                        {intervention.sandbox_config.hints.map((h, i) => (
-                          <li key={i}>{h}</li>
+                <div className="sandbox-panel">
+                  <div className="sandbox-header">
+                    <span>
+                      {intervention.sandbox_config?.environment === "javascript_eval"
+                        ? "JavaScript Sandbox"
+                        : "Python Sandbox"}
+                    </span>
+                    {intervention.sandbox_config?.hints &&
+                      intervention.sandbox_config.hints.length > 0 && (
+                        <button
+                          type="button"
+                          className="hint-btn"
+                          onClick={() => setShowHints((h) => !h)}
+                        >
+                          {showHints ? "Hide Hints" : "Show Hints"}
+                        </button>
+                      )}
+                  </div>
+
+                  {showHints && intervention.sandbox_config?.hints && (
+                    <div className="hints-box">
+                      <ul>
+                        {intervention.sandbox_config.hints.map((hint, idx) => (
+                          <li key={idx}>{hint}</li>
                         ))}
                       </ul>
-                    )}
+                    </div>
+                  )}
 
+                  <div className="code-editor-area">
                     <textarea
-                      className="code-editor"
-                      rows={8}
+                      className="code-textarea"
                       value={code}
                       onChange={(e) => setCode(e.target.value)}
+                      rows={8}
                       spellCheck={false}
+                      aria-label="Interactive Code Editor"
                     />
+                  </div>
 
-                    <div className="editor-actions">
-                      <button
-                        type="button"
-                        className="run-code-button"
-                        onClick={handleRunCode}
-                        disabled={isRunningCode}
-                      >
-                        {isRunningCode ? "Running..." : "▶ Run Experiment"}
-                      </button>
-                    </div>
+                  <div className="sandbox-controls">
+                    <button
+                      type="button"
+                      className="run-code-button"
+                      onClick={handleRunCode}
+                      disabled={isRunningCode}
+                    >
+                      {isRunningCode ? "Running..." : "▶ Run Experiment"}
+                    </button>
                   </div>
 
                   <div className="terminal-panel">
@@ -346,7 +588,7 @@ export default function InterventionOverlay({
 
                 {submitError && <p className="error-message">{submitError}</p>}
 
-                <div className="inquiry-actions">
+                <div className="form-actions">
                   <button
                     type="button"
                     className="secondary-btn"
@@ -354,6 +596,16 @@ export default function InterventionOverlay({
                   >
                     ← Review Hypothesis
                   </button>
+                  {isSkippable && (
+                    <button
+                      type="button"
+                      className="skip-button"
+                      onClick={handleSkip}
+                      disabled={isSubmitting || isSkipping}
+                    >
+                      Skip Checkpoint
+                    </button>
+                  )}
                   <button
                     type="submit"
                     className="submit-button"
@@ -401,13 +653,25 @@ export default function InterventionOverlay({
 
             {submitError && <p className="error-message">{submitError}</p>}
 
-            <button
-              type="submit"
-              className="submit-button"
-              disabled={!hasMcqSelection || isSubmitting}
-            >
-              {isSubmitting ? "Evaluating..." : "Submit Answer"}
-            </button>
+            <div className="checkpoint-actions">
+              {isSkippable && (
+                <button
+                  type="button"
+                  className="skip-button"
+                  onClick={handleSkip}
+                  disabled={isSubmitting || isSkipping}
+                >
+                  Skip Checkpoint
+                </button>
+              )}
+              <button
+                type="submit"
+                className="submit-button"
+                disabled={!hasMcqSelection || isSubmitting}
+              >
+                {isSubmitting ? "Evaluating..." : "Submit Answer"}
+              </button>
+            </div>
           </form>
         )}
       </div>

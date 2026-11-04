@@ -17,6 +17,31 @@ class InterventionType(str, Enum):
     MULTIPLE_SELECTION = "multiple_selection"
     PREDICT_AND_VERIFY = "predict_and_verify"
     INQUIRY_SANDBOX = "inquiry_sandbox"
+    OPEN_ENDED = "open_ended"
+
+
+class InterventionPolicy(str, Enum):
+    SKIPPABLE = "skippable"
+    REQUIRED = "required"
+    REQUIRED_WITH_RETRY = "required_with_retry"
+
+
+class ResumptionPolicy(str, Enum):
+    IMMEDIATE_OPTIMISTIC = "immediate_optimistic"
+    WAIT_FOR_RESULT = "wait_for_result"
+
+
+class RubricMisconception(BaseModel):
+    tag: str = Field(..., min_length=1)
+    description: str = Field(..., min_length=1)
+    remediation: str = Field(..., min_length=1)
+
+
+class RubricConfig(BaseModel):
+    key_concepts: list[str] = Field(default_factory=list)
+    misconceptions: list[RubricMisconception] = Field(default_factory=list)
+    reference_answer: str = Field(default="")
+    passing_score: float = Field(default=0.7, ge=0.0, le=1.0)
 
 
 class SandboxEnvironment(str, Enum):
@@ -53,6 +78,7 @@ class InterventionVariant(BaseModel):
     correct_answer: str | list[str] | None = None
     correct_feedback: str = Field(..., min_length=1)
     incorrect_feedback: str = Field(..., min_length=1)
+    rubric: RubricConfig | None = None
 
 
 class Intervention(BaseModel):
@@ -71,6 +97,11 @@ class Intervention(BaseModel):
     hypothesis_prompt: str | None = None
     hypothesis_options: list[Option] = Field(default_factory=list)
     variants: dict[int, InterventionVariant] = Field(default_factory=dict)
+    # V0.3 Policy, Resumption & Rubric Extensions
+    policy: InterventionPolicy = InterventionPolicy.SKIPPABLE
+    resumption_policy: ResumptionPolicy = ResumptionPolicy.IMMEDIATE_OPTIMISTIC
+    rubric: RubricConfig | None = None
+
 
     @model_validator(mode="after")
     def validate_intervention(self) -> "Intervention":

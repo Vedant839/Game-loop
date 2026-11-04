@@ -3,7 +3,9 @@ import type {
   EvaluationResult,
   Lecture,
   LectureSummary,
+  OpenEndedSubmissionResponse,
   SessionState,
+  SubmissionStatusResponse,
 } from "./types";
 
 export type HealthStatus = {
@@ -213,4 +215,83 @@ export async function generateInterventions(lectureId: string): Promise<Lecture>
     throw new Error(errorData.detail ?? "Failed to generate interventions.");
   }
   return (await response.json()) as Lecture;
+}
+
+export async function skipIntervention(
+  sessionId: string,
+  interventionId: string,
+  reason?: string
+): Promise<SessionState> {
+  const response = await fetchWithTimeout(
+    `${getApiBaseUrl()}/api/sessions/${sessionId}/interventions/${interventionId}/skip`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    }
+  );
+  if (!response.ok) {
+    const errorData = (await response.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(errorData.detail ?? "Failed to skip intervention.");
+  }
+  return (await response.json()) as SessionState;
+}
+
+export async function submitOpenEnded(
+  sessionId: string,
+  interventionId: string,
+  idempotencyKey: string,
+  answer: string
+): Promise<OpenEndedSubmissionResponse> {
+  const response = await fetchWithTimeout(
+    `${getApiBaseUrl()}/api/sessions/${sessionId}/submissions/open-ended`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        intervention_id: interventionId,
+        idempotency_key: idempotencyKey,
+        user_answer: answer,
+      }),
+    }
+  );
+  if (!response.ok) {
+    const errorData = (await response.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(errorData.detail ?? "Failed to submit open-ended answer.");
+  }
+  return (await response.json()) as OpenEndedSubmissionResponse;
+}
+
+export async function getSubmissionStatus(
+  sessionId: string,
+  submissionId: string
+): Promise<SubmissionStatusResponse> {
+  const response = await fetchWithTimeout(
+    `${getApiBaseUrl()}/api/sessions/${sessionId}/submissions/${submissionId}`
+  );
+  if (!response.ok) {
+    const errorData = (await response.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(errorData.detail ?? "Failed to get submission status.");
+  }
+  return (await response.json()) as SubmissionStatusResponse;
+}
+
+export async function selfAssessSubmission(
+  sessionId: string,
+  submissionId: string,
+  selfAssessedCorrect: boolean
+): Promise<SessionState> {
+  const response = await fetchWithTimeout(
+    `${getApiBaseUrl()}/api/sessions/${sessionId}/submissions/${submissionId}/self-assess`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ self_assessed_correct: selfAssessedCorrect }),
+    }
+  );
+  if (!response.ok) {
+    const errorData = (await response.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(errorData.detail ?? "Failed to self-assess submission.");
+  }
+  return (await response.json()) as SessionState;
 }

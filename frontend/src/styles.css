@@ -101,6 +101,99 @@ h1 {
   max-height: 540px;
 }
 
+/* Fullscreen support: video-wrapper is the fullscreen target so overlays remain interactive */
+.video-wrapper:fullscreen,
+.video-wrapper:-webkit-full-screen,
+.video-wrapper.is-fullscreen {
+  width: 100vw;
+  height: 100vh;
+  max-height: 100vh;
+  border-radius: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #000;
+  z-index: 1000;
+}
+
+.video-wrapper:fullscreen .lecture-video,
+.video-wrapper:-webkit-full-screen .lecture-video,
+.video-wrapper.is-fullscreen .lecture-video {
+  width: 100%;
+  height: 100%;
+  max-height: 100vh;
+  object-fit: contain;
+}
+
+.video-wrapper:fullscreen .intervention-overlay-backdrop,
+.video-wrapper:-webkit-full-screen .intervention-overlay-backdrop,
+.video-wrapper.is-fullscreen .intervention-overlay-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-floating-fs-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  cursor: pointer;
+  z-index: 40;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  opacity: 0.65;
+}
+
+.video-wrapper:hover .video-floating-fs-btn {
+  opacity: 1;
+}
+
+.video-floating-fs-btn:hover {
+  background: rgba(15, 23, 42, 0.95);
+  border-color: var(--accent-blue);
+  transform: scale(1.1);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
+}
+
+.fullscreen-btn {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  transition: all 0.2s;
+  margin-left: auto;
+}
+
+.fullscreen-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-blue);
+  background: rgba(56, 189, 248, 0.1);
+}
+
 .player-status-bar {
   display: flex;
   justify-content: space-between;
@@ -779,5 +872,303 @@ h1 {
 
 .b2b-stat strong {
   color: var(--text-primary);
+}
+
+/* V0.3 Anti-Ad Immersion & Interactive Timeline */
+.video-wrapper.approaching-glow {
+  animation: approachingPulse 2s infinite ease-in-out;
+  border: 1px solid rgba(56, 189, 248, 0.6);
+}
+
+@keyframes approachingPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 24px 6px rgba(56, 189, 248, 0.65);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.3);
+  }
+}
+
+.timeline-container {
+  position: relative;
+  width: 100%;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  margin-top: 4px;
+  cursor: pointer;
+}
+
+.timeline-track {
+  position: relative;
+  width: 100%;
+  height: 6px;
+  background-color: #1e293b;
+  border-radius: 9999px;
+  overflow: visible;
+}
+
+.timeline-progress {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
+  border-radius: 9999px;
+  transition: width 0.1s linear;
+}
+
+.timeline-pip {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s;
+  cursor: pointer;
+  z-index: 10;
+}
+
+.timeline-pip:hover {
+  transform: translate(-50%, -50%) scale(1.4);
+}
+
+/* Hollow for skippable, Solid for required */
+.timeline-pip.skippable {
+  background-color: var(--card-bg);
+  border: 2px solid var(--accent-blue);
+}
+
+.timeline-pip.required {
+  background-color: var(--accent-blue);
+  border: 2px solid #fff;
+}
+
+.timeline-pip.pending {
+  border-color: var(--accent-blue);
+}
+
+.timeline-pip.completed {
+  background-color: #10b981;
+  border-color: #059669;
+}
+
+.timeline-pip.skipped {
+  background-color: #475569;
+  border-color: #64748b;
+  opacity: 0.7;
+}
+
+.timeline-pip.evaluating {
+  background-color: #f59e0b;
+  border-color: #d97706;
+  animation: evaluatingBlink 1s infinite alternate;
+}
+
+@keyframes evaluatingBlink {
+  from { opacity: 0.6; }
+  to { opacity: 1; }
+}
+
+/* Policy Badges */
+.policy-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.policy-badge.skippable {
+  background: rgba(148, 163, 184, 0.2);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.policy-badge.required {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.checkpoint-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.skip-button {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.skip-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  border-color: #64748b;
+}
+
+.skip-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Open-Ended Interventions UI */
+.open-ended-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.open-ended-textarea {
+  width: 100%;
+  min-height: 120px;
+  background-color: #0b1120;
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  font-family: inherit;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  box-sizing: border-box;
+  resize: vertical;
+  transition: border-color 0.2s;
+}
+
+.open-ended-textarea:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+}
+
+.textarea-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Evaluating Indicator */
+.evaluating-card {
+  padding: 1.5rem;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.evaluating-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(245, 158, 11, 0.3);
+  border-top-color: #f59e0b;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Self Assessment UI */
+.self-assess-card {
+  background: #1e293b;
+  border: 1px solid var(--accent-purple);
+  border-radius: 8px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.rubric-reference {
+  background: #0f172a;
+  border-radius: 6px;
+  padding: 0.85rem;
+  border-left: 3px solid var(--accent-purple);
+}
+
+.rubric-reference h5 {
+  margin: 0 0 0.4rem 0;
+  color: var(--accent-purple);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+}
+
+.rubric-reference p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #e2e8f0;
+}
+
+.key-concepts-list {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.concept-pill {
+  background: rgba(129, 140, 248, 0.15);
+  color: #c7d2fe;
+  border: 1px solid rgba(129, 140, 248, 0.3);
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.self-assess-buttons {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.self-assess-pass-btn {
+  flex: 1;
+  background: #10b981;
+  color: #fff;
+  border: none;
+  padding: 0.65rem 1rem;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.self-assess-pass-btn:hover {
+  opacity: 0.9;
+}
+
+.self-assess-fail-btn {
+  flex: 1;
+  background: #64748b;
+  color: #fff;
+  border: none;
+  padding: 0.65rem 1rem;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.self-assess-fail-btn:hover {
+  opacity: 0.9;
 }
 

@@ -1,30 +1,42 @@
-from fastapi import FastAPI, HTTPException, status
+import asyncio
+from datetime import datetime, timezone
+import uuid
+from typing import Any
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
 import aiofiles
 import math
 
 from backend.config import get_settings
-from backend.schemas.lecture import Lecture, LectureSummary
+from backend.database import get_database
+from backend.schemas.lecture import Lecture, LectureSummary, ResumptionPolicy
 from backend.schemas.session import (
     ActivateInterventionRequest,
     ActiveInterventionPayload,
     CreateSessionRequest,
     EvaluationResult,
     InquiryExperimentSubmission,
+    InterventionStateEnum,
     LearnerProfile,
+    OpenEndedSubmissionRequest,
+    OpenEndedSubmissionResponse,
+    SelfAssessRequest,
     SessionState,
+    SkipInterventionRequest,
+    SubmissionStatus,
+    SubmissionStatusResponse,
     SubmitAnswerRequest,
     SyncPlaybackRequest,
 )
-from backend.services.lecture_service import get_lecture_service
-from backend.services.lecture_service import _generate_for_lecture
+from backend.services.lecture_service import get_lecture_service, _generate_for_lecture
 from backend.services.gemini_authoring_service import generate_interventions_with_gemini
 from backend.services.session_service import SessionError, get_session_service
 from backend.services.learner_service import get_learner_service
+from backend.services.evaluator_service import get_evaluator_service
 
 settings = get_settings()
+
 
 app = FastAPI(title="game-loop API", version="0.1.0")
 
@@ -208,6 +220,203 @@ def get_learner_profile(client_id: str, user_id: str) -> LearnerProfile:
     """Retrieve the current learner mastery profile for a B2B client's user."""
     learner_service = get_learner_service()
     return learner_service.get_or_create_profile(client_id, user_id)
+
+
+# ---------------------------------------------------------------------------
+# V0.3 Endpoints: Skip, Open-Ended Semantic Grading, and B2B Telemetry
+# ---------------------------------------------------------------------------
+
+
+@app.post(
+    "/api/sessions/{session_id}/interventions/{intervention_id}/skip",
+    response_model=SessionState,
+)
+def skip_intervention(
+    session_id: str, intervention_id: str, req: SkipInterventionRequest | None = None
+) -> SessionState:
+    """Explicitly skip an intervention if permitted by policy."""
+    session_service = get_session_service()
+    reason = req.reason if req and req.reason else "learner_choice"
+    try:
+        return session_service.skip_intervention(session_id, intervention_id, reason=reason)
+    except SessionError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+
+@app.post(
+    "/api/sessions/{session_id}/submissions/open-ended",
+    response_model=OpenEndedSubmissionResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def submit_open_ended(
+    session_id: str, req: OpenEndedSubmissionRequest
+) -> OpenEndedSubmissionResponse:
+    """Submit open-ended freeform answer for asynchronous AI evaluation."""
+    session_service = get_session_service()
+    evaluator_service = get_evaluator_service()
+    db = get_database()
+
+    try:
+        session = session_service._get_or_load_session(session_id)
+    except SessionError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+
+    intervention_id = req.intervention_id
+    target_intv = next((i for i in session.lecture.interventions if i.id == intervention_id), None)
+    if not target_intv:
+        raise HTTPException(status_code=404, detail=f"Intervention '{intervention_id}' not found.")
+
+    if (
+        session.active_intervention_id != intervention_id
+        or session.interventions_state[intervention_id] != InterventionStateEnum.ACTIVE
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Intervention '{intervention_id}' is not currently ACTIVE.",
+        )
+
+    # Idempotency check: see if submission with idempotency_key already exists
+    with db.connection() as conn:
+        cursor = conn.execute(
+            "SELECT submission_id FROM submissions WHERE session_id = ? AND idempotency_key = ?",
+            (session_id, req.idempotency_key),
+        )
+        row = cursor.fetchone()
+        if row:
+            submission_id = row["submission_id"]
+            return OpenEndedSubmissionResponse(
+                submission_id=submission_id,
+                status=SubmissionStatus.PENDING,
+                resumption_policy=getattr(target_intv, "resumption_policy", ResumptionPolicy.IMMEDIATE_OPTIMISTIC),
+                message="Submission already in progress.",
+                session_state=session.get_state(),
+            )
+
+    submission_id = str(uuid.uuid4())
+    tier = session.active_intervention_tier
+    resumption_policy = getattr(target_intv, "resumption_policy", ResumptionPolicy.IMMEDIATE_OPTIMISTIC)
+
+    # Transition state to EVALUATING
+    session.interventions_state[intervention_id] = InterventionStateEnum.EVALUATING
+    if resumption_policy == ResumptionPolicy.IMMEDIATE_OPTIMISTIC:
+        # Optimistic resume: unlock video playhead
+        session.active_intervention_id = None
+    session.version += 1
+    session_service._persist_session(session)
+
+    rubric_dict = target_intv.rubric.model_dump() if getattr(target_intv, "rubric", None) else None
+
+    # Save initial pending submission in SQLite
+    db.save_submission(
+        submission_id=submission_id,
+        session_id=session_id,
+        intervention_id=intervention_id,
+        idempotency_key=req.idempotency_key,
+        user_answer=req.user_answer,
+        status=SubmissionStatus.PENDING.value,
+        resumption_policy=resumption_policy.value,
+    )
+
+    # Dispatch async background task
+    asyncio.create_task(
+        evaluator_service.evaluate_submission_async(
+            submission_id=submission_id,
+            session_id=session_id,
+            intervention_id=intervention_id,
+            question=target_intv.question,
+            user_answer=req.user_answer,
+            rubric=rubric_dict,
+            client_id=session.client_id,
+            user_id=session.external_user_id,
+            concept=target_intv.concept,
+            tier=tier,
+        )
+    )
+
+    return OpenEndedSubmissionResponse(
+        submission_id=submission_id,
+        status=SubmissionStatus.PENDING,
+        resumption_policy=resumption_policy,
+        message="Answer received. Evaluating asynchronously.",
+        session_state=session.get_state(),
+    )
+
+
+@app.get(
+    "/api/sessions/{session_id}/submissions/{submission_id}",
+    response_model=SubmissionStatusResponse,
+)
+def get_submission_status(session_id: str, submission_id: str) -> SubmissionStatusResponse:
+    """Check asynchronous evaluation status."""
+    db = get_database()
+    sub = db.get_submission(submission_id)
+    if not sub:
+        raise HTTPException(status_code=404, detail=f"Submission '{submission_id}' not found.")
+
+    status_val = SubmissionStatus(sub["status"])
+
+    # Check for foreground timeout (5.0s threshold)
+    created_dt = datetime.fromisoformat(sub["created_at"])
+    now_dt = datetime.now(timezone.utc)
+    elapsed = (now_dt - created_dt).total_seconds()
+
+    reference_rubric = None
+    session_service = get_session_service()
+    try:
+        session = session_service._get_or_load_session(session_id)
+        target_intv = next(
+            (i for i in session.lecture.interventions if i.id == sub["intervention_id"]), None
+        )
+        if target_intv and getattr(target_intv, "rubric", None):
+            reference_rubric = target_intv.rubric.model_dump()
+    except Exception:
+        pass
+
+    if status_val == SubmissionStatus.PENDING and elapsed > 5.0:
+        status_val = SubmissionStatus.TIMED_OUT
+
+    return SubmissionStatusResponse(
+        submission_id=sub["submission_id"],
+        status=status_val,
+        ai_score=sub["ai_score"],
+        is_correct=sub["is_correct"],
+        formative_feedback=sub["formative_feedback"],
+        misconceptions_detected=sub["misconceptions"],
+        self_assessed=sub["self_assessed"],
+        evaluation_latency_ms=sub["latency_ms"],
+        reference_rubric=reference_rubric,
+    )
+
+
+@app.post(
+    "/api/sessions/{session_id}/submissions/{submission_id}/self-assess",
+    response_model=SessionState,
+)
+def self_assess_submission(
+    session_id: str, submission_id: str, req: SelfAssessRequest
+) -> SessionState:
+    """Self-assess timed-out submission using reference rubric."""
+    evaluator_service = get_evaluator_service()
+    session_service = get_session_service()
+    try:
+        updated_dict = evaluator_service.self_assess_submission(
+            submission_id=submission_id,
+            session_id=session_id,
+            self_assessed_correct=req.self_assessed_correct,
+        )
+        return SessionState.model_validate(updated_dict)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/telemetry")
+def export_telemetry(client_id: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+    """Export structured telemetry events for B2B LMS integration."""
+    db = get_database()
+    return db.export_telemetry(client_id=client_id, limit=limit)
+
 
 
 @app.get("/media/{file_name}")

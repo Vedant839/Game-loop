@@ -4,9 +4,35 @@ export type InterventionType =
   | "single_choice"
   | "multiple_selection"
   | "predict_and_verify"
-  | "inquiry_sandbox";
+  | "inquiry_sandbox"
+  | "open_ended";
 
-export type InterventionState = "PENDING" | "ACTIVE" | "COMPLETED" | "BYPASSED";
+export type InterventionState =
+  | "PENDING"
+  | "ACTIVE"
+  | "COMPLETED"
+  | "BYPASSED"
+  | "EVALUATING"
+  | "SKIPPED";
+
+export type InterventionPolicy = "skippable" | "required" | "required_with_retry";
+
+export type ResumptionPolicy = "immediate_optimistic" | "wait_for_result";
+
+export type SubmissionStatus = "pending" | "evaluating" | "completed" | "failed";
+
+export interface RubricMisconception {
+  tag: string;
+  description: string;
+  remediation: string;
+}
+
+export interface RubricConfig {
+  key_concepts: string[];
+  misconceptions: RubricMisconception[];
+  reference_answer: string;
+  passing_score: number;
+}
 
 export type SandboxEnvironment = "python_wasm" | "javascript_eval" | "parametric_sim";
 
@@ -55,6 +81,9 @@ export interface Intervention {
   hypothesis_prompt?: string | null;
   hypothesis_options?: Option[];
   variants?: Record<number, InterventionVariant>;
+  policy?: InterventionPolicy;
+  resumption_policy?: ResumptionPolicy;
+  rubric?: RubricConfig | null;
 }
 
 export interface TranscriptSegment {
@@ -119,6 +148,33 @@ export interface ActiveInterventionPayload {
   hypothesis_prompt?: string | null;
   hypothesis_options?: Option[];
   sandbox_config?: SandboxConfig | null;
+  policy?: InterventionPolicy;
+  resumption_policy?: ResumptionPolicy;
+  rubric?: RubricConfig | null;
+}
+
+export interface OpenEndedSubmissionResponse {
+  submission_id: string;
+  status: SubmissionStatus;
+  resumption_policy: ResumptionPolicy;
+  ai_score?: number | null;
+  is_correct?: boolean | null;
+  formative_feedback?: string | null;
+  misconceptions_detected: string[];
+  session_state?: SessionState | null;
+  reference_rubric?: RubricConfig | null;
+}
+
+export interface SubmissionStatusResponse {
+  submission_id: string;
+  status: SubmissionStatus;
+  ai_score?: number | null;
+  is_correct?: boolean | null;
+  formative_feedback?: string | null;
+  misconceptions_detected: string[];
+  self_assessed: boolean;
+  evaluation_latency_ms?: number | null;
+  reference_rubric?: RubricConfig | null;
 }
 
 export interface EvaluationResult {

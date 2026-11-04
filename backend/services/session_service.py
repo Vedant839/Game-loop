@@ -1,8 +1,12 @@
-"""In-memory session manager enforcing deterministic state transitions per SPEC.md."""
+"""Session manager enforcing deterministic state transitions and SQLite persistence per SPEC.md."""
+
+from __future__ import annotations
 
 import uuid
 from typing import Any
-from backend.schemas.lecture import InterventionType, Lecture
+
+from backend.database import Database, get_database
+from backend.schemas.lecture import InterventionPolicy, InterventionType, Lecture, ResumptionPolicy
 from backend.schemas.session import (
     ActiveInterventionPayload,
     EvaluationResult,
@@ -59,6 +63,7 @@ class RuntimeSession:
                     id=intv.id,
                     trigger_time=intv.trigger_time,
                     state=self.interventions_state[intv.id],
+                    policy=getattr(intv, "policy", InterventionPolicy.SKIPPABLE),
                 )
                 for intv in self.lecture.interventions
             ],
@@ -66,9 +71,63 @@ class RuntimeSession:
 
 
 class SessionService:
-    def __init__(self, lecture_service: LectureService | None = None) -> None:
+    def __init__(
+        self,
+        lecture_service: LectureService | None = None,
+        db: Database | None = None,
+    ) -> None:
         self.lecture_service = lecture_service or get_lecture_service()
+        self.db = db or get_database()
         self._sessions: dict[str, RuntimeSession] = {}
+
+    def _persist_session(self, session: RuntimeSession) -> None:
+        completed_json = {
+            k: v.model_dump_json() for k, v in session.completed_submissions.items()
+        }
+        interventions_state = {k: v.value for k, v in session.interventions_state.items()}
+        self.db.save_session(
+            session_id=session.session_id,
+            lecture_id=session.lecture.id,
+            client_id=session.client_id,
+            external_user_id=session.external_user_id,
+            tier_override=session.tier_override,
+            version=session.version,
+            active_intervention_id=session.active_intervention_id,
+            active_intervention_tier=session.active_intervention_tier,
+            interventions_state=interventions_state,
+            completed_submissions=completed_json,
+        )
+
+    def _get_or_load_session(self, session_id: str) -> RuntimeSession:
+        if session_id in self._sessions:
+            return self._sessions[session_id]
+
+        data = self.db.load_session(session_id)
+        if not data:
+            raise SessionError(f"Session '{session_id}' not found.", status_code=404)
+
+        lecture = self.lecture_service.get_lecture(data["lecture_id"])
+        if not lecture:
+            raise SessionError(f"Lecture '{data['lecture_id']}' not found.", status_code=404)
+
+        session = RuntimeSession(
+            session_id=data["session_id"],
+            lecture=lecture,
+            client_id=data["client_id"],
+            external_user_id=data["external_user_id"],
+            tier_override=data["tier_override"],
+        )
+        session.version = data["version"]
+        session.active_intervention_id = data["active_intervention_id"]
+        session.active_intervention_tier = data["active_intervention_tier"]
+        session.interventions_state = {
+            k: InterventionStateEnum(v) for k, v in data["interventions_state"].items()
+        }
+        for k, v in data["completed_submissions"].items():
+            session.completed_submissions[k] = EvaluationResult.model_validate_json(v)
+
+        self._sessions[session_id] = session
+        return session
 
     def create_session(
         self,
@@ -90,18 +149,15 @@ class SessionService:
             tier_override=tier_override,
         )
         self._sessions[session_id] = session
+        self._persist_session(session)
         return session.get_state()
 
     def get_session(self, session_id: str) -> SessionState:
-        session = self._sessions.get(session_id)
-        if not session:
-            raise SessionError(f"Session '{session_id}' not found.", status_code=404)
+        session = self._get_or_load_session(session_id)
         return session.get_state()
 
     def sync_playback(self, session_id: str, playback_position: float) -> SessionState:
-        session = self._sessions.get(session_id)
-        if not session:
-            raise SessionError(f"Session '{session_id}' not found.", status_code=404)
+        session = self._get_or_load_session(session_id)
 
         changed = False
         tolerance = session.lecture.timing_config.tolerance
@@ -110,24 +166,82 @@ class SessionService:
         if session.active_intervention_id is None:
             for intv in session.lecture.interventions:
                 state = session.interventions_state[intv.id]
+                policy = getattr(intv, "policy", InterventionPolicy.SKIPPABLE)
                 if state == InterventionStateEnum.PENDING:
-                    # If playback position is beyond window end, transition to BYPASSED
                     window_end = intv.trigger_time + tolerance
                     if playback_position > window_end:
-                        session.interventions_state[intv.id] = InterventionStateEnum.BYPASSED
-                        changed = True
+                        if policy == InterventionPolicy.SKIPPABLE:
+                            session.interventions_state[intv.id] = InterventionStateEnum.BYPASSED
+                            changed = True
+                        else:
+                            # REQUIRED checkpoint cannot be bypassed via forward seek
+                            raise SessionError(
+                                f"Cannot seek past required intervention '{intv.id}'. Completion is mandatory.",
+                                status_code=403,
+                            )
 
         if changed:
             session.version += 1
+            self._persist_session(session)
 
+        return session.get_state()
+
+    def skip_intervention(
+        self, session_id: str, intervention_id: str, reason: str = "learner_choice"
+    ) -> SessionState:
+        """Explicitly skip an intervention per SPEC.md §55.3.
+        
+        Requires policy to be SKIPPABLE. Mastery is unchanged (ΔM = 0) and logged as missing evidence.
+        """
+        session = self._get_or_load_session(session_id)
+
+        target_intv = next(
+            (i for i in session.lecture.interventions if i.id == intervention_id), None
+        )
+        if not target_intv:
+            raise SessionError(f"Intervention '{intervention_id}' not found.", status_code=404)
+
+        policy = getattr(target_intv, "policy", InterventionPolicy.SKIPPABLE)
+        if policy in (InterventionPolicy.REQUIRED, InterventionPolicy.REQUIRED_WITH_RETRY):
+            raise SessionError(
+                f"Intervention '{intervention_id}' has policy '{policy.value}' and cannot be skipped.",
+                status_code=403,
+            )
+
+        current_state = session.interventions_state[target_intv.id]
+        if current_state in (
+            InterventionStateEnum.COMPLETED,
+            InterventionStateEnum.BYPASSED,
+            InterventionStateEnum.SKIPPED,
+        ):
+            raise SessionError(
+                f"Intervention '{intervention_id}' is already in terminal state '{current_state.value}'.",
+                status_code=409,
+            )
+
+        # Transition state to SKIPPED
+        session.interventions_state[target_intv.id] = InterventionStateEnum.SKIPPED
+        if session.active_intervention_id == target_intv.id:
+            session.active_intervention_id = None
+        session.version += 1
+
+        # Record skip as missing evidence in learner service
+        learner_svc = get_learner_service(self.db)
+        learner_svc.record_skip(
+            client_id=session.client_id,
+            user_id=session.external_user_id,
+            session_id=session.session_id,
+            intervention_id=target_intv.id,
+            concept=target_intv.concept,
+        )
+
+        self._persist_session(session)
         return session.get_state()
 
     def activate_intervention(
         self, session_id: str, intervention_id: str, playback_position: float
     ) -> ActiveInterventionPayload:
-        session = self._sessions.get(session_id)
-        if not session:
-            raise SessionError(f"Session '{session_id}' not found.", status_code=404)
+        session = self._get_or_load_session(session_id)
 
         target_intv = next(
             (i for i in session.lecture.interventions if i.id == intervention_id), None
@@ -148,8 +262,12 @@ class SessionService:
                 status_code=409,
             )
 
-        # Reject if state is terminal (COMPLETED or BYPASSED)
-        if current_state in (InterventionStateEnum.COMPLETED, InterventionStateEnum.BYPASSED):
+        # Reject if state is terminal (COMPLETED, BYPASSED, or SKIPPED)
+        if current_state in (
+            InterventionStateEnum.COMPLETED,
+            InterventionStateEnum.BYPASSED,
+            InterventionStateEnum.SKIPPED,
+        ):
             raise SessionError(
                 f"Intervention '{intervention_id}' is already in terminal state '{current_state.value}'.",
                 status_code=409,
@@ -165,16 +283,17 @@ class SessionService:
                 status_code=400,
             )
 
-        # Transition any prior pending interventions past window_end to BYPASSED
+        # Transition any prior pending interventions past window_end to BYPASSED (if skippable)
         for intv in session.lecture.interventions:
             if intv.id == target_intv.id:
                 break
             if session.interventions_state[intv.id] == InterventionStateEnum.PENDING:
                 if playback_position > (intv.trigger_time + tolerance):
-                    session.interventions_state[intv.id] = InterventionStateEnum.BYPASSED
+                    if getattr(intv, "policy", InterventionPolicy.SKIPPABLE) == InterventionPolicy.SKIPPABLE:
+                        session.interventions_state[intv.id] = InterventionStateEnum.BYPASSED
 
         # Resolve tier dynamically
-        learner_svc = get_learner_service()
+        learner_svc = get_learner_service(self.db)
         profile = learner_svc.get_or_create_profile(session.client_id, session.external_user_id)
         resolved_tier = learner_svc.resolve_intervention_tier(
             profile, target_intv.concept, session.tier_override
@@ -186,6 +305,7 @@ class SessionService:
         session.active_intervention_id = target_intv.id
         session.version += 1
 
+        self._persist_session(session)
         return self._build_active_payload(session, target_intv)
 
     def submit_answer(
@@ -195,9 +315,7 @@ class SessionService:
         idempotency_key: str,
         answer: str | list[str],
     ) -> EvaluationResult:
-        session = self._sessions.get(session_id)
-        if not session:
-            raise SessionError(f"Session '{session_id}' not found.", status_code=404)
+        session = self._get_or_load_session(session_id)
 
         # Idempotency check: return previous result if key already processed
         if idempotency_key in session.completed_submissions:
@@ -250,7 +368,7 @@ class SessionService:
         feedback = correct_fb if is_correct else incorrect_fb
 
         # Record in learner service
-        learner_svc = get_learner_service()
+        learner_svc = get_learner_service(self.db)
         mastery_delta, next_tier = learner_svc.record_attempt(
             session.client_id,
             session.external_user_id,
@@ -276,6 +394,7 @@ class SessionService:
 
         # Store for idempotency
         session.completed_submissions[idempotency_key] = result
+        self._persist_session(session)
         return result
 
     def submit_experiment(
@@ -283,9 +402,7 @@ class SessionService:
         session_id: str,
         submission: InquiryExperimentSubmission,
     ) -> EvaluationResult:
-        session = self._sessions.get(session_id)
-        if not session:
-            raise SessionError(f"Session '{session_id}' not found.", status_code=404)
+        session = self._get_or_load_session(session_id)
 
         if submission.idempotency_key in session.completed_submissions:
             return session.completed_submissions[submission.idempotency_key]
@@ -315,7 +432,7 @@ class SessionService:
         incorrect_fb = variant.incorrect_feedback if (variant and variant.incorrect_feedback) else target_intv.incorrect_feedback
         feedback = correct_fb if is_correct else incorrect_fb
 
-        learner_svc = get_learner_service()
+        learner_svc = get_learner_service(self.db)
         mastery_delta, next_tier = learner_svc.record_attempt(
             session.client_id,
             session.external_user_id,
@@ -338,6 +455,7 @@ class SessionService:
             suggested_next_tier=next_tier,
         )
         session.completed_submissions[submission.idempotency_key] = result
+        self._persist_session(session)
         return result
 
     def _build_active_payload(
@@ -372,6 +490,10 @@ class SessionService:
         )
         sandbox_config = sandbox_config_obj.model_dump() if sandbox_config_obj else None
 
+        rubric_dict = None
+        if getattr(intervention, "rubric", None):
+            rubric_dict = intervention.rubric.model_dump()
+
         return ActiveInterventionPayload(
             id=intervention.id,
             trigger_time=intervention.trigger_time,
@@ -385,14 +507,42 @@ class SessionService:
             hypothesis_prompt=hypothesis_prompt,
             hypothesis_options=hypothesis_options,
             sandbox_config=sandbox_config,
+            policy=getattr(intervention, "policy", InterventionPolicy.SKIPPABLE),
+            resumption_policy=getattr(intervention, "resumption_policy", ResumptionPolicy.IMMEDIATE_OPTIMISTIC),
+            rubric=rubric_dict,
         )
+
+    def record_evaluation_completed(self, session_id: str, intervention_id: str) -> None:
+        """Mark intervention COMPLETED when async AI evaluation completes."""
+        session = self._get_or_load_session(session_id)
+        if session.interventions_state.get(intervention_id) == InterventionStateEnum.EVALUATING:
+            session.interventions_state[intervention_id] = InterventionStateEnum.COMPLETED
+            if session.active_intervention_id == intervention_id:
+                session.active_intervention_id = None
+            session.version += 1
+            self._persist_session(session)
+
+    def record_self_assessment(self, session_id: str, intervention_id: str) -> SessionState:
+        """Transition intervention to COMPLETED after learner self-assesses timed-out rubric."""
+        session = self._get_or_load_session(session_id)
+        session.interventions_state[intervention_id] = InterventionStateEnum.COMPLETED
+        if session.active_intervention_id == intervention_id:
+            session.active_intervention_id = None
+        session.version += 1
+        self._persist_session(session)
+        return session.get_state()
+
 
 
 _session_service_instance: SessionService | None = None
 
 
-def get_session_service() -> SessionService:
+def get_session_service(
+    lecture_service: LectureService | None = None,
+    db: Database | None = None,
+) -> SessionService:
     global _session_service_instance
     if _session_service_instance is None:
-        _session_service_instance = SessionService()
+        _session_service_instance = SessionService(lecture_service=lecture_service, db=db)
     return _session_service_instance
+

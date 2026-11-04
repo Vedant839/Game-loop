@@ -8,14 +8,36 @@ from pydantic import BaseModel, Field
 class InterventionStateEnum(str, Enum):
     PENDING = "PENDING"
     ACTIVE = "ACTIVE"
+    EVALUATING = "EVALUATING"
     COMPLETED = "COMPLETED"
+    SKIPPED = "SKIPPED"
     BYPASSED = "BYPASSED"
+
+
+class InterventionPolicy(str, Enum):
+    SKIPPABLE = "skippable"
+    REQUIRED = "required"
+    REQUIRED_WITH_RETRY = "required_with_retry"
+
+
+class ResumptionPolicy(str, Enum):
+    IMMEDIATE_OPTIMISTIC = "immediate_optimistic"
+    WAIT_FOR_RESULT = "wait_for_result"
+
+
+class SubmissionStatus(str, Enum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+    TIMED_OUT = "timed_out"
+    FAILED = "failed"
 
 
 class InterventionSessionState(BaseModel):
     id: str
     trigger_time: float
     state: InterventionStateEnum
+    policy: InterventionPolicy = InterventionPolicy.SKIPPABLE
+
 
 
 class SessionState(BaseModel):
@@ -78,6 +100,11 @@ class ActiveInterventionPayload(BaseModel):
     hypothesis_prompt: str | None = None
     hypothesis_options: list[dict[str, str]] = Field(default_factory=list)
     sandbox_config: dict[str, Any] | None = None
+    # V0.3 policy and rubric fields
+    policy: InterventionPolicy = InterventionPolicy.SKIPPABLE
+    resumption_policy: ResumptionPolicy = ResumptionPolicy.IMMEDIATE_OPTIMISTIC
+    rubric: dict[str, Any] | None = None
+
 
 
 class LearnerProfile(BaseModel):
@@ -110,3 +137,43 @@ class B2BTelemetryEvent(BaseModel):
     intervention_id: str | None = None
     timestamp: float
     payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class SkipInterventionRequest(BaseModel):
+    intervention_id: str | None = None
+    reason: str | None = "learner_choice"
+    expected_version: int | None = None
+
+
+
+class OpenEndedSubmissionRequest(BaseModel):
+    intervention_id: str
+    idempotency_key: str = Field(..., min_length=1)
+    user_answer: str = Field(..., min_length=1)
+    expected_version: int | None = None
+
+
+class OpenEndedSubmissionResponse(BaseModel):
+    submission_id: str
+    status: SubmissionStatus
+    resumption_policy: ResumptionPolicy
+    message: str
+    session_state: SessionState
+
+
+class SubmissionStatusResponse(BaseModel):
+    submission_id: str
+    status: SubmissionStatus
+    ai_score: float | None = None
+    is_correct: bool | None = None
+    formative_feedback: str | None = None
+    misconceptions_detected: list[str] = Field(default_factory=list)
+    self_assessed: bool = False
+    evaluation_latency_ms: int | None = None
+    reference_rubric: dict[str, Any] | None = None
+
+
+class SelfAssessRequest(BaseModel):
+    self_assessed_correct: bool
+    expected_version: int | None = None
+

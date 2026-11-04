@@ -157,17 +157,77 @@ Only after the first lecture is stable:
 
 ---
 
-## Explicitly deferred to post-V0.1
+## V0.2 — Scientific Inquiry Sandbox & Adaptive Tiers (Completed)
+- Client-side zero-trust Python & JavaScript sandboxed code runners.
+- 5-phase scientific inquiry workflow (`predict_and_verify` & `inquiry_sandbox`).
+- Dynamic adaptive difficulty (Tiers 1–3) with deterministic tier resolution and streak tracking.
+- B2B multi-tenant identity mapping (`client_id`, `external_user_id`) & telemetry events.
 
-- Runtime Gemini
-- Adaptive intervention selection
-- Learner-specific generation
-- Learner models
-- Branching
-- Retry loops
-- Semantic grading
-- Database persistence
-- Production authentication
-- Multi-tenant infrastructure
-- Advanced analytics
-- Rich pedagogical metadata
+---
+
+## V0.3 — Non-Blocking Immersion, Open-Ended Semantic Grading & Persistent Multi-Tenancy (In Progress)
+
+### Goal
+Evolve `game-loop` into an enterprise-ready, non-intrusive B2B active learning engine with:
+1. Asynchronous open-ended semantic grading via Gemini with graceful timeouts and safe late-response handling.
+2. Anti-ad immersion UX (non-blocking progress bar cues, audio decrescendo, and decoupled policy-governed skipping).
+3. Embedded crash-resilient persistence (SQLite + SQLAlchemy / aiosqlite).
+4. Multi-tenant governance with comprehensive audit telemetry.
+
+---
+
+### Phase 1: Persistence Foundation (SQLite & Repositories)
+**Objectives:**
+- Replace in-memory dictionaries with embedded SQLite (`data/game_loop.db`) via SQLAlchemy / aiosqlite.
+- Implement schema models for tenants, sessions, session interventions, submissions, learner profiles, and telemetry events.
+- Maintain write-through memory caching for sub-millisecond hot reads and session sync.
+- Migrate `SessionService` and `LearnerService` to use repository patterns.
+
+**Exit Criteria:**
+- Server restart preserves active sessions and learner mastery.
+- All existing 26 backend unit tests pass without regression.
+
+---
+
+### Phase 2: Policy-Governed Skipping & Anti-Ad Immersion Flow
+**Objectives:**
+- Formalize `InterventionPolicy`: `SKIPPABLE`, `REQUIRED`, and `REQUIRED_WITH_RETRY`.
+- Enforce skip rules in backend state machine; add `SKIPPED` state with missing-evidence mastery semantics ($\Delta M = 0$).
+- Implement non-blocking progress-bar cue (timeline pips, subtle glow on approach) decoupled from skip policy.
+- Implement 300ms audio decrescendo prior to trigger pause.
+- Prevent forward seeking past `REQUIRED` checkpoints.
+
+**Exit Criteria:**
+- Skippable checkpoints can be bypassed cleanly; required checkpoints block forward progress.
+- Skips are logged as explicit telemetry events without penalizing mastery.
+
+---
+
+### Phase 3: Open-Ended Semantic Grading & Submission Lifecycle
+**Objectives:**
+- Add `open_ended` interaction schema with authored rubrics (key concepts, misconceptions, reference answer).
+- Implement `EvaluatorService` invoking Gemini asynchronously.
+- Add submission status lifecycle (`PENDING`, `COMPLETED`, `TIMED_OUT`, `FAILED`) with unique `submission_id`.
+- Implement configurable playback resumption (`IMMEDIATE_OPTIMISTIC` vs. `WAIT_FOR_RESULT`).
+- Add 5.0s foreground timeout falling back to an explicitly labeled self-assessment rubric.
+- Implement late-evaluation reconciliation guard preventing duplicate mastery updates or state corruption.
+- Deliver completed evaluation feedback via non-intrusive anchored cards rather than blocking modals if playback resumed.
+
+**Exit Criteria:**
+- Freeform answers receive formative AI feedback and score.
+- Network timeouts gracefully degrade to self-assessment without stalling the student.
+- Late-arriving evaluations are safely absorbed idempotently.
+
+---
+
+### Phase 4: End-to-End Verification & B2B Telemetry Audit
+**Objectives:**
+- Add integration tests covering the full asynchronous evaluation and skip lifecycle.
+- Update frontend React player with timeline pips, approaching glow, and freeform input component.
+- Add telemetry export endpoint for B2B LMS reporting.
+- Run complete test suite and verify clean builds.
+
+**Exit Criteria:**
+- All unit, integration, and Vitest behavioral tests pass.
+- Zero TypeScript build errors.
+

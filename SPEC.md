@@ -1626,3 +1626,244 @@ Response:
 `GET /api/learners/{client_id}/{user_id}`
 Returns `LearnerProfile` with current concept mastery map, streak, and intervention totals.
 
+---
+
+# 55. V0.3 Specification: Non-Blocking Immersion, Open-Ended Semantic Grading & Persistent Multi-Tenancy
+
+**Status:** APPROVED FOR PLANNING & IMPLEMENTATION  
+**Target Version:** `game-loop` V0.3  
+**Authority:** Extends and refines V0.1/V0.2 invariants for open-ended assessment, asynchronous evaluation, policy-governed skipping, and embedded persistence.
+
+---
+
+## 55.1 Architectural Invariants & Guarantees
+
+1. **Decoupled Skip Policy vs. Playback Cue:**
+   - Whether an intervention is skippable is governed strictly by the intervention/tenant policy model.
+   - How an upcoming intervention is communicated is governed strictly by non-blocking player UX. The two mechanisms must not be conflated.
+2. **Asynchronous Semantic Evaluation with Controlled Resumption:**
+   - Open-ended answers are evaluated asynchronously by Gemini against an authored rubric.
+   - Resumption policy is explicitly configurable per intervention: `IMMEDIATE_OPTIMISTIC` for formative learning vs. `WAIT_FOR_RESULT` for mandatory assessment.
+   - Submissions are uniquely identified and tracked via an explicit status lifecycle (`PENDING`, `COMPLETED`, `TIMED_OUT`, `FAILED`).
+   - Timed-out foreground evaluations fall back to explicitly labeled self-assessment without blocking, while late AI results are reconciled idempotently without corrupting newer session state.
+3. **Missing Evidence Skip Semantics:**
+   - A skipped question transitions the intervention to `SKIPPED`.
+   - Mastery is left unmodified ($\Delta M = 0$). Skips are recorded as explicit telemetry events and treated by the adaptation engine as **missing evidence**, not as incorrect answers or negative mastery penalty.
+4. **Embedded Persistent Multi-Tenancy:**
+   - In-memory dictionaries are replaced with an embedded, zero-infrastructure SQLite database (via SQLAlchemy / aiosqlite).
+   - Sessions, submissions, learner profiles, and audit telemetry persist across server restarts, scoped by `client_id`.
+
+---
+
+## 55.2 Extended Runtime State Machine
+
+In V0.3, interventions support two additional states: `EVALUATING` and `SKIPPED`.
+
+```text
+               ┌─────────────┐
+               │   PENDING   │
+               └──────┬──────┘
+                      │
+           ┌──────────┴──────────┐
+           │ (valid activation)   │ (forward seek past trigger under SKIPPABLE)
+           ▼                     ▼
+     ┌───────────┐         ┌───────────┐
+     │  ACTIVE   │         │ BYPASSED  │  (Terminal)
+     └─────┬─────┘         └───────────┘
+           │
+     ┌─────┼──────────────────────────────┐
+     │     │                              │
+     │     │ (submit open-ended)          │ (skip under SKIPPABLE policy)
+     │     ▼                              ▼
+     │   ┌─────────────┐            ┌───────────┐
+     │   │ EVALUATING  │            │  SKIPPED  │  (Terminal)
+     │   └──────┬──────┘            └───────────┘
+     │          │
+     │          │ (grading completed / self-assessed)
+     │          ▼
+     │   ┌─────────────┐
+     └──►│  COMPLETED  │  (Terminal)
+(submit  └─────────────┘
+ structured)
+```
+
+### Allowed Transitions:
+* `PENDING → ACTIVE`: Playback position enters trigger window $[T - \epsilon, T + \epsilon]$.
+* `PENDING → BYPASSED`: Forward seek past window (only permitted if policy is `SKIPPABLE`).
+* `ACTIVE → COMPLETED`: Instant deterministic submission (MCQ, multiple selection, or inquiry code runner verification).
+* `ACTIVE → EVALUATING`: Submission of an open-ended freeform response awaiting asynchronous AI grading.
+* `ACTIVE → SKIPPED`: Learner explicitly triggers skip (only permitted if policy is `SKIPPABLE`).
+* `EVALUATING → COMPLETED`: Asynchronous AI evaluation arrives or learner completes a timed-out self-assessment rubric.
+
+`COMPLETED`, `SKIPPED`, and `BYPASSED` are terminal states. Once an intervention reaches a terminal state, backward seeking cannot re-activate it.
+
+---
+
+## 55.3 Checkpoint & Skip Policy Model
+
+Interventions and B2B tenants configure an explicit `InterventionPolicy`:
+
+```python
+class InterventionPolicy(str, Enum):
+    SKIPPABLE = "skippable"
+    REQUIRED = "required"
+    REQUIRED_WITH_RETRY = "required_with_retry"
+```
+
+| Policy | Learner Action | Playback Resumption | Seeking Guard | Mastery Effect |
+|---|---|---|---|---|
+| `SKIPPABLE` | Learner may answer or click **Skip**. | Immediate on submit or skip. | Forward seek past window transitions to `BYPASSED`. | Submit: $\pm \Delta M$.<br>Skip: $\Delta M = 0$ (missing evidence). |
+| `REQUIRED` | Learner must submit an answer. Skip button is absent. | Governed by `resumption_policy`. | Forward seek past trigger point is blocked/clamped. | Submit: $\pm \Delta M$. |
+| `REQUIRED_WITH_RETRY` | Learner must achieve a passing score ($S \ge \text{passing\_score}$). | Paused until passing score achieved. | Seeking disabled until passed. | Submit: updates streak and mastery. Dropped tier on successive failures. |
+
+Backend authority enforces policy rules on every mutation request:
+* If a learner attempts to `skip` an intervention marked `REQUIRED` or `REQUIRED_WITH_RETRY`, the backend rejects the request with HTTP 403 `PolicyViolationError`.
+* If a forward seek bypasses a `REQUIRED` intervention, the backend sync endpoint rejects the bypass and clamps playback to the required trigger window.
+
+---
+
+## 55.4 Open-Ended Answers & Submission Lifecycle
+
+### Submission Record Schema:
+```python
+class SubmissionStatus(str, Enum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+    TIMED_OUT = "timed_out"
+    FAILED = "failed"
+
+class SubmissionRecord(BaseModel):
+    submission_id: str = Field(default_factory=lambda: str(uuid4()))
+    session_id: str
+    intervention_id: str
+    idempotency_key: str
+    user_answer: str
+    status: SubmissionStatus = SubmissionStatus.PENDING
+    resumption_policy: str = "immediate_optimistic" # or "wait_for_result"
+    ai_score: Optional[float] = None                # 0.0 to 1.0
+    is_correct: Optional[bool] = None
+    formative_feedback: Optional[str] = None
+    misconceptions_detected: list[str] = Field(default_factory=list)
+    self_assessed: bool = False
+    mastery_applied: bool = False
+    created_at: datetime
+    evaluated_at: Optional[datetime] = None
+    evaluation_latency_ms: Optional[int] = None
+```
+
+### The 4-Stage Asynchronous Lifecycle:
+1. **Immediate Acknowledgment (0–100ms):**
+   - Backend persists `SubmissionRecord` with `status = PENDING`.
+   - Returns HTTP 202 Accepted with `submission_id`.
+   - Frontend behavior:
+     - If `resumption_policy == "immediate_optimistic"`: Video resumes immediately. A subtle status chip *"Evaluating your reasoning..."* displays in the player status area.
+     - If `resumption_policy == "wait_for_result"`: Video remains paused displaying an animated shimmer ticker.
+2. **Asynchronous Evaluation Dispatch:**
+   - Background worker invokes Gemini with structured rubric prompt:
+     - `question`, `rubric.key_concepts`, `rubric.misconceptions`, `rubric.reference_answer`, `user_answer`.
+   - Evaluation hash cache: `SHA256(intervention_id + normalized_answer)` checked in SQLite; cached entries return in $< 10$ms.
+3. **Foreground Timeout & Labeled Self-Assessment (Default: 5000ms):**
+   - If AI evaluation does not arrive within the configurable UX threshold (default 5.0s):
+     - The foreground stops waiting.
+     - The intervention status updates to `TIMED_OUT`.
+     - An explicitly labeled alternative appears:
+       > *"AI evaluation is taking longer than expected. You can review the reference rubric below to self-assess, or continue watching."*
+     - If the learner self-assesses (e.g. clicks "I got this right"), `self_assessed = True`, mastery delta is recorded with source tag `self_assessment`, and intervention transitions to `COMPLETED`.
+4. **Late Result Arrival & Stale State Protection:**
+   - If Gemini evaluation completes after the foreground timeout:
+     - Backend updates `SubmissionRecord.status = COMPLETED`, records `ai_score` and `formative_feedback`.
+     - **Mastery Idempotency Guard**: If `mastery_applied == True` (because learner already self-assessed or completed), the backend does **not** re-apply mastery updates.
+     - **Non-Intrusive Delivery**: If the learner is still playing video, the feedback card does **not** interrupt playback with a blocking modal. Instead, a non-blocking toast/card anchored to the completed intervention is delivered, allowing the student to inspect feedback at their convenience.
+
+---
+
+## 55.5 Non-Blocking Playback UX (Anti-Ad Immersion)
+
+1. **Timeline Checkpoint Pips:**
+   - Every scheduled intervention is marked on the player progress bar with a subtle visual marker (dot/pip).
+   - Distinct visual treatments:
+     - Hollow circle: `SKIPPABLE` practice checkpoint.
+     - Solid diamond: `REQUIRED` compliance checkpoint.
+2. **Approaching Interaction Cue:**
+   - When the playback position enters $[T - 6.0\text{s}, T]$, a subtle non-blocking glowing aura appears on the approaching timeline pip.
+   - Does not obscure video content, show countdown timers, or force learners to wait.
+   - Informs the learner that a reflection point is approaching naturally with the lecture flow.
+3. **Audio Decrescendo:**
+   - 300ms prior to the physical pause at `trigger_time`, player audio gracefully fades down to 0, eliminating harsh jarring stops.
+
+---
+
+## 55.6 Embedded Persistence Architecture (SQLite)
+
+V0.3 transitions from volatile Python dictionaries to SQLite:
+- Single local database file: `data/game_loop.db`.
+- Managed via SQLAlchemy ORM with async connection pooling (`aiosqlite`).
+- Write-through memory cache for active sessions guarantees sub-millisecond API response times while ensuring crash-resilient persistence across server restarts.
+
+### Database Tables:
+* `tenants`: Multi-tenant configuration, client name, default skip policies, API keys.
+* `sessions`: Session ID, lecture ID, client ID, external user ID, current state version, created/updated timestamps.
+* `session_interventions`: Active/completed/skipped states, selected tier, submission idempotency keys, results.
+* `submissions`: Detailed submission records, open-ended answers, evaluation statuses, latency telemetry.
+* `learner_profiles`: Concept mastery vectors, streaks, friction indices, total intervention counts.
+* `telemetry_events`: Structured event log (`intervention_triggered`, `intervention_skipped`, `evaluation_completed`, `rubric_self_assessed`).
+
+---
+
+## 55.7 V0.3 API Contract Additions
+
+### 1. Submit Open-Ended Freeform Answer
+`POST /api/sessions/{session_id}/submissions/open-ended`
+```json
+{
+  "intervention_id": "math_proof_step_3",
+  "idempotency_key": "sub_uuid_456",
+  "user_answer": "Because angles on a straight line add up to 180 degrees, angle ABC must be 65."
+}
+```
+Response (HTTP 202 Accepted):
+```json
+{
+  "submission_id": "sub_rec_789",
+  "status": "pending",
+  "resumption_policy": "immediate_optimistic",
+  "message": "Answer received. Evaluating asynchronously.",
+  "session_state": { ... }
+}
+```
+
+### 2. Poll / Stream Submission Status
+`GET /api/sessions/{session_id}/submissions/{submission_id}`
+Response (HTTP 200 OK):
+```json
+{
+  "submission_id": "sub_rec_789",
+  "status": "completed",
+  "ai_score": 0.95,
+  "is_correct": true,
+  "formative_feedback": "Excellent reasoning! You correctly identified the straight-angle theorem.",
+  "misconceptions_detected": [],
+  "evaluation_latency_ms": 1420
+}
+```
+
+### 3. Skip Intervention
+`POST /api/sessions/{session_id}/interventions/{intervention_id}/skip`
+```json
+{
+  "reason": "learner_choice"
+}
+```
+Response:
+* HTTP 200 OK if policy is `SKIPPABLE` (transitions to `SKIPPED`, video resumes, $\Delta M = 0$).
+* HTTP 403 Forbidden if policy is `REQUIRED` (`"Cannot skip required intervention"`).
+
+### 4. Self-Assess Timed-Out Submission
+`POST /api/sessions/{session_id}/submissions/{submission_id}/self-assess`
+```json
+{
+  "self_assessed_correct": true
+}
+```
+
+
