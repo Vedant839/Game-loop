@@ -112,4 +112,25 @@ class SessionRepository(BaseRepository):
                 "interventions_state": interventions_state,
                 "completed_submissions": completed_submissions,
             }
+    def list_sessions_by_creator(
+        self, creator_id: str, lecture_id: str | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        """Return session identifiers and lecture metadata for one creator."""
+        bounded_limit = max(1, min(limit, 500))
+        with self.db.connection() as conn:
+            if lecture_id is None:
+                cursor = conn.execute(
+                    """SELECT session_id, lecture_id, created_at, updated_at
+                       FROM sessions WHERE client_id = ?
+                       ORDER BY created_at DESC LIMIT ?""",
+                    (creator_id, bounded_limit),
+                )
+            else:
+                cursor = conn.execute(
+                    """SELECT session_id, lecture_id, created_at, updated_at
+                       FROM sessions WHERE client_id = ? AND lecture_id = ?
+                       ORDER BY created_at DESC LIMIT ?""",
+                    (creator_id, lecture_id, bounded_limit),
+                )
+            return [dict(row) for row in cursor.fetchall()]
 

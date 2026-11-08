@@ -241,6 +241,18 @@ def submit_experiment(session_id: str, req: InquiryExperimentSubmission) -> Eval
         raise HTTPException(status_code=e.status_code, detail=e.message)
 
 
+@app.get("/api/studio/sessions")
+def list_creator_sessions(
+    lecture_id: str | None = None,
+    limit: int = 100,
+    creator: dict[str, str] = Depends(require_creator),
+) -> list[dict[str, Any]]:
+    """List session identifiers belonging to the authenticated creator."""
+    return get_database().sessions.list_sessions_by_creator(
+        creator["creator_id"], lecture_id=lecture_id, limit=limit
+    )
+
+
 @app.get("/api/learners/{client_id}/{user_id}", response_model=LearnerProfile)
 def get_learner_profile(
     client_id: str,

@@ -57,3 +57,22 @@ def test_creator_cannot_read_another_creators_telemetry_or_profile(creator_token
     assert {row["client_id"] for row in own.json()} == {"creator_a"}
     assert client.get("/api/telemetry?client_id=creator_b", headers=creator_a).status_code == 403
     assert client.get("/api/learners/creator_b/b-user", headers=creator_a).status_code == 403
+
+
+def test_first_creator_can_list_linux_lecture_and_its_sessions(creator_token_factory):
+    header = creator_token_factory("default_client")
+    created = client.post(
+        "/api/sessions",
+        json={"lecture_id": "linux_command_line", "client_id": "default_client", "learner_id": "legacy-learner"},
+    )
+    assert created.status_code == 201
+
+    lectures = client.get("/api/lectures")
+    assert any(item["id"] == "linux_command_line" for item in lectures.json())
+
+    sessions = client.get(
+        "/api/studio/sessions?lecture_id=linux_command_line", headers=header
+    )
+    assert sessions.status_code == 200
+    assert any(item["session_id"] == created.json()["session_id"] for item in sessions.json())
+    assert all("external_user_id" not in item for item in sessions.json())
