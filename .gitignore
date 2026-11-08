@@ -22,3 +22,4 @@ data/media/
 
 *.sqlite*
 *.db.*
+.pytest-tmp-*/
