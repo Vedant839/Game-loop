@@ -306,8 +306,11 @@ def test_api_experiment_endpoint_integration() -> None:
     assert data["tier"] >= 1
 
 
-def test_api_learner_profile_endpoint() -> None:
-    res = client.get("/api/learners/test_corp/learner_42")
+def test_api_learner_profile_endpoint(creator_token_factory) -> None:
+    res = client.get(
+        "/api/learners/test_corp/learner_42",
+        headers=creator_token_factory("test_corp"),
+    )
     assert res.status_code == 200
     data = res.json()
     assert data["user_id"] == "learner_42"

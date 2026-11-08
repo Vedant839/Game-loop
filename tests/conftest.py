@@ -1,10 +1,14 @@
 """Pytest configuration and isolation fixtures."""
 
+import hashlib
 import os
+import secrets
+
 import pytest
 from backend.config import get_settings
 from backend import database
 from backend.services import evaluator_service, learner_service, lecture_service, session_service
+from scripts.migrate import migrate_database
 
 
 @pytest.fixture(autouse=True)
@@ -31,3 +35,22 @@ def isolate_test_db(tmp_path, monkeypatch):
     session_service._session_service_instance = None
     get_settings.cache_clear()
 
+
+
+@pytest.fixture
+def creator_token_factory():
+    """Create a DB-backed creator token and return its bearer header."""
+    database_instance = database.get_database()
+    migrate_database(database_instance.db_path)
+
+    def issue(creator_id: str = "default_client") -> dict[str, str]:
+        raw_token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+        database_instance.creators.save_token(
+            token_hash=token_hash,
+            creator_id=creator_id,
+            label="pytest",
+        )
+        return {"Authorization": f"Bearer {raw_token}"}
+
+    return issue

@@ -185,7 +185,7 @@ def test_self_assess_flow(test_client, lecture_with_open_ended):
     assert q_state["state"] == "COMPLETED"
 
 
-def test_telemetry_export(test_client, lecture_with_open_ended):
+def test_telemetry_export(test_client, lecture_with_open_ended, creator_token_factory):
     # Trigger a skip to create a telemetry event
     resp = test_client.post(
         "/api/sessions",
@@ -199,7 +199,10 @@ def test_telemetry_export(test_client, lecture_with_open_ended):
     test_client.post(f"/api/sessions/{session_id}/interventions/q_skip/skip")
 
     # Export telemetry
-    t_resp = test_client.get("/api/telemetry?client_id=telemetry_client")
+    t_resp = test_client.get(
+        "/api/telemetry?client_id=telemetry_client",
+        headers=creator_token_factory("telemetry_client"),
+    )
     assert t_resp.status_code == 200
     events = t_resp.json()
     assert len(events) >= 1

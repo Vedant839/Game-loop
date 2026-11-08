@@ -20,12 +20,15 @@ def test_v03_lecture_detail_route_response_shape() -> None:
     }
 
 
-def test_v03_telemetry_route_response_shape() -> None:
+def test_v03_telemetry_route_response_shape(creator_token_factory) -> None:
     get_database().record_telemetry(
         client_id="snapshot_client", session_id="snapshot_session", user_id="snapshot_user",
         event_type="snapshot_event", payload={"source": "test"}, timestamp=1.0,
     )
-    response = client.get("/api/telemetry?client_id=snapshot_client")
+    response = client.get(
+        "/api/telemetry?client_id=snapshot_client",
+        headers=creator_token_factory("snapshot_client"),
+    )
 
     assert response.status_code == 200
     assert len(response.json()) == 1
@@ -34,8 +37,11 @@ def test_v03_telemetry_route_response_shape() -> None:
     }
 
 
-def test_v03_learners_route_response_shape() -> None:
-    response = client.get("/api/learners/snapshot_client/snapshot_user")
+def test_v03_learners_route_response_shape(creator_token_factory) -> None:
+    response = client.get(
+        "/api/learners/snapshot_client/snapshot_user",
+        headers=creator_token_factory("snapshot_client"),
+    )
 
     assert response.status_code == 200
     assert set(response.json()) == {
