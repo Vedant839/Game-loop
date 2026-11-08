@@ -77,7 +77,7 @@ Preserves existing V0.3 structure so current data and tests continue to work wit
 #### Migration 2: V0.4 Incremental Columns & Backfill (Guarded with PRAGMA table_info Checks)
 
 > [!IMPORTANT]
-> To ensure idempotency and prevent `duplicate column name` failures upon re-running migrations, `scripts/migrate.py` inspects existing table columns via `PRAGMA table_info({table_name})` in Python before executing any `ALTER TABLE ... ADD COLUMN` statement. The SQL below represents the logical schema evolution:
+> To ensure idempotency and prevent `duplicate column name` failures upon re-running migrations, `scripts/migrate.py` inspects existing table columns via `PRAGMA table_info({table_name})` in Python before executing any `ALTER TABLE ... ADD COLUMN` statement. The SQL below represents the logical schema evolution: The runner creates `schema_migrations` before guarded backfills.
 
 ```sql
 -- sessions: add V0.4 creator, learner, and course relationships (guarded in Python)
@@ -106,8 +106,8 @@ ALTER TABLE submissions ADD COLUMN client_reported INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE telemetry_events ADD COLUMN lecture_id TEXT NOT NULL DEFAULT '';
 
 -- Data backfill for legacy V0.3 records
-UPDATE sessions SET creator_id = COALESCE(client_id, 'default_client'), learner_id = COALESCE(external_user_id, 'legacy') WHERE creator_id IS NULL OR creator_id = 'default_creator';
-UPDATE session_interventions SET lecture_id = (SELECT lecture_id FROM sessions WHERE sessions.session_id = session_interventions.session_id) WHERE lecture_id = '';
+UPDATE sessions SET creator_id = COALESCE(client_id, 'default_client'), learner_id = COALESCE(external_user_id, 'legacy') WHERE (creator_id IS NULL OR creator_id = 'default_client' OR creator_id = 'default_creator') AND (learner_id IS NULL OR learner_id = 'default_learner') AND NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version = 1);
+UPDATE session_interventions SET lecture_id = (SELECT lecture_id FROM sessions WHERE sessions.session_id = session_interventions.session_id) WHERE lecture_id = '' AND NOT EXISTS (SELECT 1 FROM schema_migrations WHERE version = 1);
 ```
 
 #### Migration 3: V0.4 New Tables
@@ -307,7 +307,7 @@ To prevent leaking capability tokens, full answer keys, or learner profiles, exi
 
 ### 4.4 Study Guide Security & Sanitization
 - Endpoint `POST /api/sessions/{session_id}/study_guide` compiles a personalized guide from the student's own submissions, reflections, and sandbox code.
-- **Mid-lecture restriction:** To prevent key concept harvesting, the study guide **only includes concepts for checkpoints already completed or revealed** (`state IN ('completed', 'skipped')` or `attempt_count >= 3`). Future/pending checkpoint concepts are omitted.
+- **Mid-lecture restriction:** To prevent key concept harvesting, the study guide **only includes concepts for checkpoints already completed or revealed** (`state IN ('COMPLETED', 'BYPASSED')` or `attempt_count >= 3`). `BYPASSED` means playback was sought past a pending skippable checkpoint. Future/pending checkpoint concepts are omitted.
 - Markdown output is sanitized server-side, and the frontend renderer applies `DOMPurify.sanitize(rendered_html)` before inserting into the DOM. Capability-gated by `session_id`.
 
 ---
@@ -377,7 +377,7 @@ Attempt 3 miss ──> Reveal correct answer + Mandatory Reflection Textarea (�
   3. Backend checks:
      - `session.active_intervention_id IS NULL`.
      - Cooldown: no `queue_recall_sent` event in `tab_events` for this session in the last 300 seconds.
-     - If a scheduled `flash_recall` checkpoint is in `state = 'pending'` within 90s, queue it.
+     - If a scheduled `flash_recall` checkpoint is in `state = 'PENDING'` within 90s, queue it.
      - Otherwise, draw an unasked item from the lecture's `recall_pool`.
   4. If eligible: logs `queue_recall_sent`, sanitizes the recall question (stripping `correct_answer`), and returns `{ queue_recall: true, intervention: {...} }`.
   5. Player displays non-blocking floating recall card without pausing video.
@@ -502,7 +502,8 @@ class BrandingConfig(BaseModel):
 `GET /api/studio/analytics/{lecture_id}/confusion_radar`
 - Queries `session_interventions` filtered by `lecture_id` and latest `revision` (excluding `is_preview = 1`).
 - Mathematical formulation:
-  $$\text{reached\_sessions} = \text{count of sessions with } \text{state} \in ('\text{active}', '\text{completed}', '\text{skipped}') \text{ or } \text{attempt\_count} > 0$$
+  $$\text{reached\_sessions} = \text{count of sessions with } \text{state} != '\text{PENDING}' \text{ or } \text{attempt\_count} > 0$$
+  `state != 'PENDING'` counts `BYPASSED` forward-seek rows as reached.
   $$\text{miss\_rate} = \frac{\text{count}(\text{distinct } \text{session\_id} \text{ where } \text{attempt\_count} > 1 \text{ OR } (\text{attempt\_count} = 1 \text{ AND } \text{state} = '\text{COMPLETED}' \text{ AND } \text{first\_try\_correct} = 0))}{\text{reached\_sessions}}$$
   $$\text{hint\_rate} = \frac{\text{count}(\text{hint\_used} > 0)}{\text{reached\_sessions}}$$
   $$\text{confusion\_score} = (\text{miss\_rate} \times 0.6) + (\text{hint\_rate} \times 0.4)$$
@@ -625,7 +626,7 @@ gcloud run deploy game-loop-api \
 ### Baseline & Persistence
 | # | Criterion | Spec Ref |
 |---|---|---|
-| 1 | All 34 existing backend tests pass at every sprint boundary | Baseline |
+| 1 | The 39-test baseline (original 34 plus the streak characterization and route-shape tests) passes at every sprint boundary | Baseline |
 | 2 | All 18 existing frontend Vitest tests pass at every sprint boundary | Baseline |
 | 3 | No SQL outside `backend/repositories/` or `backend/database.py` | §2.1, P0.1 |
 | 4 | Migration runner `scripts/migrate.py` is idempotent and runs outside app boot | §10.1 |
@@ -689,11 +690,11 @@ gcloud run deploy game-loop-api \
 | 46 | Learner deletion endpoint cascades deletion across sessions, submissions, and profiles | §4.3 |
 | 47 | Event retention script removes telemetry events older than 90 days | §4.3 |
 | 48 | Container respects `${PORT:-8080}` and deployed Cloud Run service answers `GET /api/health` with HTTP 200 | §10.3 |
-| 49 | V0.3 signed engine streak values after three correct attempts and two wrong attempts remain pinned by a characterization test | section 5.3 |
-| 50 | Snapshot tests pin the response shapes of V0.3 lectures, telemetry, and learner routes | section 3.4 |
-| 51 | Snapshot tests pin the response shapes of V0.3 session routes | section 3.4 |
-| 52 | `first_try_correct` is set by first evaluation and is unchanged by later retries | section 9.1 |
-| 53 | The legacy session backfill updates only rows still marked with a legacy creator value and is a no-op on a second run | section 2.1 |
+| 49 | Migration runs twice on a V0.3 database copy, leaves the second run unchanged, and all tests pass | section 10.1 |
+| 50 | `/media/*` routes return HTTP 404 in production | section 3.4 |
+| 51 | The V0.3 engine streak characterization passes with correct, correct, correct, wrong, wrong | section 5.3 |
+| 52 | No session response contains answer or rubric fields | section 4.2 |
+| 53 | The first creator token can list the Linux lecture and its existing sessions | section 3.1 |
 
 ---
 

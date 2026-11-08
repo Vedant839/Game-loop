@@ -1,4 +1,4 @@
-﻿"""Small response-shape snapshots for the public V0.3 API routes."""
+"""Small response-shape snapshots for the public V0.3 API routes."""
 
 from fastapi.testclient import TestClient
 
@@ -9,13 +9,14 @@ from backend.main import app
 client = TestClient(app)
 
 
-def test_v03_lectures_route_response_shape() -> None:
-    response = client.get("/api/lectures")
+def test_v03_lecture_detail_route_response_shape() -> None:
+    # This V0.3 full-lecture shape is expected to change when P0.4 sanitizes this route.
+    response = client.get("/api/lectures/linear_algebra_vectors")
 
     assert response.status_code == 200
-    assert response.json()
-    assert set(response.json()[0]) == {
-        "id", "title", "subject", "grade", "duration_seconds", "video_url", "intervention_count"
+    assert set(response.json()) == {
+        "id", "title", "subject", "grade", "duration_seconds", "video_url",
+        "timing_config", "transcript", "interventions",
     }
 
 

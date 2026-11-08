@@ -76,6 +76,9 @@ def test_v03_engine_streak_characterization() -> None:
     svc.record_attempt("client_char", "user_char", "concept_a", is_correct=True, tier=2)
     assert svc.get_or_create_profile("client_char", "user_char").streak == 2
 
+    svc.record_attempt("client_char", "user_char", "concept_a", is_correct=True, tier=2)
+    assert svc.get_or_create_profile("client_char", "user_char").streak == 3
+
     # Incorrect resets to negative and decrements
     svc.record_attempt("client_char", "user_char", "concept_a", is_correct=False, tier=2)
     assert svc.get_or_create_profile("client_char", "user_char").streak == -1
