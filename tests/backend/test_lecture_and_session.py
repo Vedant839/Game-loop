@@ -100,10 +100,18 @@ def test_generate_interventions_refreshes_runtime_lecture_without_old_interventi
     monkeypatch.setattr("backend.main.generate_interventions_with_gemini", fake_generate)
     monkeypatch.setattr(
         "backend.main.settings",
-        types.SimpleNamespace(gemini_api_key=types.SimpleNamespace(get_secret_value=lambda: "test-key")),
+        types.SimpleNamespace(
+            gemini_api_key=types.SimpleNamespace(get_secret_value=lambda: "test-key"),
+            creator_monthly_token_cap=500_000,
+        ),
     )
 
-    response = generate_interventions_for_lecture("linear_algebra_vectors")
+    from backend.database import get_database
+    from scripts.migrate import migrate_database
+    migrate_database(get_database().db_path)
+    response = generate_interventions_for_lecture(
+        "linear_algebra_vectors", creator={"creator_id": "test_creator"}
+    )
 
     assert response.interventions[0].concept == "Fresh vector idea"
     assert captured["before_generate"] == []

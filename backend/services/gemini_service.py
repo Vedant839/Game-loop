@@ -24,7 +24,10 @@ from backend.schemas.lecture import (
     TranscriptSegment,
 )
 
+from backend.security_logging import add_api_key_redaction
+
 logger = logging.getLogger(__name__)
+add_api_key_redaction(logger)
 
 MAX_INTERVENTIONS = 6
 TARGET_INTERVENTIONS = 4
@@ -320,7 +323,7 @@ def generate_interventions_with_gemini(lecture: Lecture, api_key: str) -> list[I
 
     if not raw_text:
         raise GeminiAuthoringError(
-            f"Gemini generation failed after 2 attempts. Last error: {last_error}"
+            "Gemini generation failed after 2 attempts."
         )
 
     # Parse JSON

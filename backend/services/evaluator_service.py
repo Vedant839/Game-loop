@@ -21,7 +21,10 @@ from backend.database import Database, get_database
 from backend.schemas.session import InterventionStateEnum, SubmissionStatus
 from backend.services.learner_service import get_learner_service
 
+from backend.security_logging import add_api_key_redaction
+
 logger = logging.getLogger(__name__)
+add_api_key_redaction(logger)
 
 
 class EvaluationOutput(BaseModel):

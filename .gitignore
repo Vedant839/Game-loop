@@ -19,3 +19,6 @@ data/*.db
 *.mp4
 data/media/
 .testsprite/
+
+*.sqlite*
+*.db.*

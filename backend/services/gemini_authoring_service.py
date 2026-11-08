@@ -18,6 +18,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
+from backend.security_logging import add_api_key_redaction
 from backend.schemas.lecture import (
     Difficulty,
     Intervention,
@@ -31,6 +32,7 @@ from backend.schemas.lecture import (
 )
 
 logger = logging.getLogger(__name__)
+add_api_key_redaction(logger)
 
 SUPPORTED_GEMINI_MODELS = [
     "gemini-3.8-flash",
@@ -372,9 +374,7 @@ def generate_interventions_with_gemini(
             break
 
     if not raw_text:
-        raise RuntimeError(
-            f"Gemini generation failed after retries. Last error: {last_exc}"
-        )
+        raise RuntimeError("Gemini generation failed after retries.") from None
 
     try:
         data: Any = json.loads(raw_text)

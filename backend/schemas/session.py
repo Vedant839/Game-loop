@@ -53,6 +53,7 @@ class SessionState(BaseModel):
 class CreateSessionRequest(BaseModel):
     lecture_id: str
     client_id: str | None = "default_client"
+    learner_id: str | None = None
     external_user_id: str | None = "default_learner"
     tier_override: int | None = None
 

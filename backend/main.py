@@ -2,13 +2,14 @@ import asyncio
 from datetime import datetime, timezone
 import uuid
 from typing import Any
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 import aiofiles
 import math
 
 from backend.config import get_settings
+from backend.auth import require_creator
 from backend.database import get_database
 from backend.schemas.lecture import Lecture, LectureSummary, ResumptionPolicy
 from backend.schemas.session import (
@@ -56,7 +57,9 @@ def get_health() -> dict[str, str]:
 
 
 @app.post("/api/lectures", response_model=Lecture, status_code=status.HTTP_201_CREATED)
-def create_lecture(lecture: Lecture) -> Lecture:
+def create_lecture(
+    lecture: Lecture, _creator: dict[str, str] = Depends(require_creator)
+) -> Lecture:
     """Create a custom lecture definition and persist it on disk."""
     service = get_lecture_service()
     if lecture.id in {"math_sample_lecture", "physics_kinematics"}:
@@ -86,7 +89,11 @@ def get_lecture(lecture_id: str) -> Lecture:
 
 
 @app.post("/api/lectures/{lecture_id}/generate_interventions", response_model=Lecture)
-def generate_interventions_for_lecture(lecture_id: str, max_count: int = 4):
+def generate_interventions_for_lecture(
+    lecture_id: str,
+    max_count: int = 4,
+    creator: dict[str, str] = Depends(require_creator),
+):
     """Generate interventions for a lecture, grounded in its actual transcript content.
 
     When a Gemini API key is configured, this calls Gemini with the full
@@ -110,6 +117,13 @@ def generate_interventions_for_lecture(lecture_id: str, max_count: int = 4):
     if api_key is not None:
         key_value = api_key.get_secret_value()
         if key_value:
+            db = get_database()
+            creator_id = creator["creator_id"] if isinstance(creator, dict) else "default_client"
+            if (
+                db.creators.get_monthly_token_usage(creator_id)
+                >= settings.creator_monthly_token_cap
+            ):
+                raise HTTPException(status_code=429, detail="Monthly Gemini token cap reached")
             try:
                 generated = generate_interventions_with_gemini(
                     lecture=generation_lecture,
@@ -118,12 +132,24 @@ def generate_interventions_for_lecture(lecture_id: str, max_count: int = 4):
                     max_count=max_count,
                 )
                 service.set_runtime_lecture(generated)
-                return generated
-            except RuntimeError as exc:
-                raise HTTPException(
-                    status_code=502,
-                    detail=f"Gemini generation failed: {exc}",
+                estimated_tokens = max(
+                    1,
+                    (
+                        len(generation_lecture.model_dump_json())
+                        + len(generated.model_dump_json())
+                    )
+                    // 4,
                 )
+                db.creators.log_usage(
+                    str(uuid.uuid4()),
+                    creator_id,
+                    lecture_id,
+                    "lecture_generation",
+                    estimated_tokens,
+                )
+                return generated
+            except RuntimeError:
+                raise HTTPException(status_code=502, detail="Gemini generation failed") from None
 
     # No API key configured — fall back to deterministic generator
     generated = _generate_for_lecture(generation_lecture, max_count)
@@ -143,7 +169,7 @@ def create_session(req: CreateSessionRequest) -> SessionState:
         return session_service.create_session(
             lecture_id=req.lecture_id,
             client_id=req.client_id or "default_client",
-            external_user_id=req.external_user_id or "default_learner",
+            external_user_id=req.learner_id or req.external_user_id or "default_learner",
             tier_override=req.tier_override,
         )
     except SessionError as e:
@@ -216,8 +242,14 @@ def submit_experiment(session_id: str, req: InquiryExperimentSubmission) -> Eval
 
 
 @app.get("/api/learners/{client_id}/{user_id}", response_model=LearnerProfile)
-def get_learner_profile(client_id: str, user_id: str) -> LearnerProfile:
+def get_learner_profile(
+    client_id: str,
+    user_id: str,
+    creator: dict[str, str] = Depends(require_creator),
+) -> LearnerProfile:
     """Retrieve the current learner mastery profile for a B2B client's user."""
+    if client_id != creator["creator_id"]:
+        raise HTTPException(status_code=403, detail="Creator cannot access another tenant")
     learner_service = get_learner_service()
     return learner_service.get_or_create_profile(client_id, user_id)
 
@@ -407,10 +439,16 @@ def self_assess_submission(
 
 
 @app.get("/api/telemetry")
-def export_telemetry(client_id: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+def export_telemetry(
+    client_id: str | None = None,
+    limit: int = 100,
+    creator: dict[str, str] = Depends(require_creator),
+) -> list[dict[str, Any]]:
     """Export structured telemetry events for B2B LMS integration."""
+    if client_id is not None and client_id != creator["creator_id"]:
+        raise HTTPException(status_code=403, detail="Creator cannot access another tenant")
     db = get_database()
-    return db.export_telemetry(client_id=client_id, limit=limit)
+    return db.export_telemetry(client_id=creator["creator_id"], limit=limit)
 
 
 

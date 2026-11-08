@@ -50,7 +50,7 @@
 | **Tab-return trigger** | When returning after `away_seconds > 60` with video playing and no active checkpoint: queue scheduled pending `flash_recall` if within 90s; otherwise queue a sanitized item from lecture's `recall_pool`. Enforces 300s cooldown between tab-return triggers for that session. | §5.6 |
 | Study guide | Compiled from student's own answers, reflection text, and submitted code. Key concepts from lecture JSON only, restricted to completed/revealed checkpoints. DOMPurify sanitization. Gated by `session_id` capability. | §4.4 |
 | **Branding** | Custom accent color with WCAG 2.1 contrast check (minimum 4.5:1 ratio, fallback `#38bdf8`), course title badge, instructor bio, removable "Powered by" badge. | §8.3 |
-| **Confusion Radar math** | Checkpoints have `revision: int DEFAULT 1`. Grouped by `(intervention_id, revision)`. Rates divide by **reached sessions** (`state != 'PENDING'`). Miss rate accounts for flash recall (`attempt_count > 1 OR (attempt_count == 1 AND state = 'COMPLETED' AND first_try_correct == 0)`). Formula: `(miss_rate * 0.6) + (hint_rate * 0.4)`. | §9.1 |
+| **Confusion Radar math** | Checkpoints have `revision: int DEFAULT 1`. Grouped by `(intervention_id, revision)`. Reached means `state IN ('ACTIVE','COMPLETED','SKIPPED') OR attempt_count > 0`; `BYPASSED` is excluded because forward seek means the learner never saw the checkpoint. `SKIPPED` counts as reached but not as a miss. Miss rate accounts for flash recall (`attempt_count > 1 OR (attempt_count == 1 AND state = 'COMPLETED' AND first_try_correct = 0)`). Formula: `(miss_rate * 0.6) + (hint_rate * 0.4)`. | §9.1 |
 | **Studio workflows** | Time-ordered checkpoint list with editable timestamp for repositioning, delete button, per-checkpoint skip-policy selector, preview toggle (edit vs student mode), intensity selector, and IngestPage. | §7.2 |
 | **Prompt injection defense** | Answer fenced as untrusted data. Gemini structured output requires an `evidence_quote` (minimum 3 words or $\ge$15 chars) per matched concept; backend normalizes whitespace/punctuation and drops any concept whose quote does not appear verbatim in the student's answer. Score correction can only lower score. Advisory flagging only (keywords exclude `"you are"`). | §6.1, §6.2 |
 | **Migrations** | Standalone CLI runner `scripts/migrate.py`. Never executed during multi-instance application boot. All migrations are additive and backward-compatible. | §2.1, §10.1 |
@@ -261,7 +261,7 @@ To prevent leaking capability tokens, full answer keys, or learner profiles, exi
   2. Frontend requests `POST /api/sessions` with `{ lecture_id, learner_id }`.
   3. Backend returns `{ session_id: UUID, ... }`.
   4. Frontend stores `session_id` in `localStorage["gl_session_{lecture_id}"]`.
-  5. **Safari cross-origin iframe fallback:** If `localStorage` throws a security error, frontend catches it and stores both IDs in `sessionStorage`, displaying an unobtrusive notice: *"Progress saved for this browser tab only."* (Note: Safari ITP may clear script-writable storage after 7 days of inactivity; this is accepted for pilots).
+  5. If `localStorage` is unavailable, the player shows a clear storage error and does not silently create a tab-only identity. There is no `sessionStorage` fallback.
   6. All subsequent student API calls require only `session_id` as the capability token.
 
 ### 4.2 Student-Facing Payload Sanitization (Answer Protection)
@@ -502,8 +502,8 @@ class BrandingConfig(BaseModel):
 `GET /api/studio/analytics/{lecture_id}/confusion_radar`
 - Queries `session_interventions` filtered by `lecture_id` and latest `revision` (excluding `is_preview = 1`).
 - Mathematical formulation:
-  $$\text{reached\_sessions} = \text{count of sessions with } \text{state} != '\text{PENDING}' \text{ or } \text{attempt\_count} > 0$$
-  `state != 'PENDING'` counts `BYPASSED` forward-seek rows as reached.
+  $$\text{reached\_sessions} = \text{count of sessions with } (\text{state} \in \{'ACTIVE','COMPLETED','SKIPPED'\}) \text{ or } \text{attempt\_count} > 0$$
+  `BYPASSED` is excluded: V0.3 sets it when playback seeks past a pending skippable checkpoint, so the learner did not see that checkpoint. `SKIPPED` counts as reached, but is not a miss by itself.
   $$\text{miss\_rate} = \frac{\text{count}(\text{distinct } \text{session\_id} \text{ where } \text{attempt\_count} > 1 \text{ OR } (\text{attempt\_count} = 1 \text{ AND } \text{state} = '\text{COMPLETED}' \text{ AND } \text{first\_try\_correct} = 0))}{\text{reached\_sessions}}$$
   $$\text{hint\_rate} = \frac{\text{count}(\text{hint\_used} > 0)}{\text{reached\_sessions}}$$
   $$\text{confusion\_score} = (\text{miss\_rate} \times 0.6) + (\text{hint\_rate} \times 0.4)$$
@@ -587,7 +587,7 @@ gcloud run deploy game-loop-api \
 - [ ] **P0.2: Migration Runner & Backfill** — Implement `scripts/migrate.py` and `scripts/backfill_lectures.py`. Execute migrations against V0.3 schema, seed `creator_id`, backfill `lecture_id`, and verify idempotency.
 - [ ] **P0.3: Turso Driver Spike & Swap** — Conduct a 1-hour spike: test `libsql-experimental` connection, run migrations, perform 5 concurrent writes, measure query latency, and verify connection pooling / batching. Implement `TursoDatabase` in `backend/database.py`.
 - [ ] **P0.4: Creator Auth & Quota Enforcement** — Implement `backend/auth.py`, `creator_tokens`, `scripts/create_token.py`, `scripts/revoke_token.py`. Implement monthly token cap check in `evaluator_service.py`. Gate V0.3 routes (`POST /api/lectures`, `GET /api/telemetry`, `GET /api/learners/{client_id}/{user_id}`).
-- [ ] **P0.5: Anonymous Learner Identity** — Remove all `uid` query parameters. Implement client-side `learner_id` namespaced per creator in `localStorage["gl_learner_{creator_id}"]` (with `sessionStorage` fallback), and capability-gated session routes.
+- [ ] **P0.5: Anonymous Learner Identity** — Remove all `uid` query parameters. Implement client-side `learner_id` namespaced per creator in `localStorage["gl_learner_{creator_id}"]` (no `sessionStorage` fallback), and capability-gated session routes.
 - **Exit Gate:** 34 backend tests pass.
 
 ### P1 — Ingestion & Video Adapters
@@ -619,6 +619,8 @@ gcloud run deploy game-loop-api \
 - [ ] **P4.5: Deployment Verification** — Root Dockerfile with `${PORT:-8080}`, migration CLI, and Cloud Run script verification.
 - **Exit Gate:** All 53 acceptance criteria pass.
 
+> **Deployment hold:** Do not deploy this service publicly until P3.3 delivers and tests the sanitized student lecture endpoint. The unauthenticated `GET /api/lectures/{id}` currently returns full lecture answers.
+
 ---
 
 ## 12. Acceptance Criteria Checklist (53 Total)
@@ -631,8 +633,8 @@ gcloud run deploy game-loop-api \
 | 3 | No SQL outside `backend/repositories/` or `backend/database.py` | §2.1, P0.1 |
 | 4 | Migration runner `scripts/migrate.py` is idempotent and runs outside app boot | §10.1 |
 | 5 | `scripts/backfill_lectures.py` successfully imports existing lecture JSON files into `lectures` table and sets `creator_id` | §10.2 |
-| 6 | All tests pass against Turso LibSQL backend | §10.2, P0.3 |
-| 7 | Concurrent write test (5 simultaneous writes) passes without state corruption | P0.3 |
+| 6 | All tests pass against Turso LibSQL backend **(unverified: only the spike has run; the suite still needs a Turso adapter)** | §10.2, P0.3 |
+| 7 | Concurrent write test (5 simultaneous writes) passes without state corruption **(verified: 5/5 spike writes landed)** | P0.3 |
 
 ### Security, Auth & Quotas
 | # | Criterion | Spec Ref |

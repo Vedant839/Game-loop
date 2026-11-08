@@ -85,10 +85,23 @@ export async function createLecture(lecture: Lecture): Promise<Lecture> {
   return (await response.json()) as Lecture;
 }
 
+export function getLearnerId(creatorId = "default_client"): string {
+  const key = `gl_learner_${creatorId}`;
+  try {
+    const existing = window.localStorage.getItem(key);
+    if (existing) return existing;
+    const learnerId = window.crypto.randomUUID();
+    window.localStorage.setItem(key, learnerId);
+    return learnerId;
+  } catch {
+    throw new Error("Progress cannot be saved because browser local storage is unavailable.");
+  }
+}
+
 export async function createSession(
   lectureId: string,
   clientId: string = "default_client",
-  externalUserId: string = "default_learner",
+  learnerId: string = getLearnerId(clientId),
   tierOverride?: number
 ): Promise<SessionState> {
   const response = await fetchWithTimeout(`${getApiBaseUrl()}/api/sessions`, {
@@ -97,7 +110,7 @@ export async function createSession(
     body: JSON.stringify({
       lecture_id: lectureId,
       client_id: clientId,
-      external_user_id: externalUserId,
+      learner_id: learnerId,
       tier_override: tierOverride,
     }),
   });
