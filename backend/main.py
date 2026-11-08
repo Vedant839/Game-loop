@@ -276,21 +276,16 @@ async def submit_open_ended(
         )
 
     # Idempotency check: see if submission with idempotency_key already exists
-    with db.connection() as conn:
-        cursor = conn.execute(
-            "SELECT submission_id FROM submissions WHERE session_id = ? AND idempotency_key = ?",
-            (session_id, req.idempotency_key),
+    existing_row = db.submissions.get_by_idempotency_key(session_id, req.idempotency_key)
+    if existing_row:
+        submission_id = existing_row["submission_id"]
+        return OpenEndedSubmissionResponse(
+            submission_id=submission_id,
+            status=SubmissionStatus.PENDING,
+            resumption_policy=getattr(target_intv, "resumption_policy", ResumptionPolicy.IMMEDIATE_OPTIMISTIC),
+            message="Submission already in progress.",
+            session_state=session.get_state(),
         )
-        row = cursor.fetchone()
-        if row:
-            submission_id = row["submission_id"]
-            return OpenEndedSubmissionResponse(
-                submission_id=submission_id,
-                status=SubmissionStatus.PENDING,
-                resumption_policy=getattr(target_intv, "resumption_policy", ResumptionPolicy.IMMEDIATE_OPTIMISTIC),
-                message="Submission already in progress.",
-                session_state=session.get_state(),
-            )
 
     submission_id = str(uuid.uuid4())
     tier = session.active_intervention_tier
@@ -419,83 +414,84 @@ def export_telemetry(client_id: str | None = None, limit: int = 100) -> list[dic
 
 
 
-@app.get("/media/{file_name}")
-async def serve_media(request: Request, file_name: str):
-    """Serve media files with basic HTTP Range support for browser playback.
+if settings.env != "production":
+    @app.get("/media/{file_name}")
+    async def serve_media(request: Request, file_name: str):
+        """Serve media files with basic HTTP Range support for browser playback.
 
-    - If the client sends a `Range` header, respond with `206 Partial Content` and
-      the requested byte range.
-    - Otherwise return a normal `200` full-file response.
-    This is a minimal implementation suitable for local development and testing.
-    """
-    media_path = settings.media_dir / file_name
-    if not media_path.exists() or not media_path.is_file():
-        raise HTTPException(status_code=404, detail="media not found")
+        - If the client sends a `Range` header, respond with `206 Partial Content` and
+          the requested byte range.
+        - Otherwise return a normal `200` full-file response.
+        This is a minimal implementation suitable for local development and testing.
+        """
+        media_path = settings.media_dir / file_name
+        if not media_path.exists() or not media_path.is_file():
+            raise HTTPException(status_code=404, detail="media not found")
 
-    file_size = media_path.stat().st_size
+        file_size = media_path.stat().st_size
 
-    range_header = request.headers.get("range")
-    if not range_header:
-        return FileResponse(media_path, media_type="video/mp4")
+        range_header = request.headers.get("range")
+        if not range_header:
+            return FileResponse(media_path, media_type="video/mp4")
 
-    # Parse a single range like: bytes=START-END
-    try:
-        units, _, range_spec = range_header.partition("=")
-        if units.strip().lower() != "bytes":
-            raise ValueError("Only 'bytes' unit is supported")
-        start_str, _, end_str = range_spec.partition("-")
-        start = int(start_str) if start_str else 0
-        end = int(end_str) if end_str else file_size - 1
-    except Exception:
-        raise HTTPException(status_code=416, detail="Invalid Range header")
+        # Parse a single range like: bytes=START-END
+        try:
+            units, _, range_spec = range_header.partition("=")
+            if units.strip().lower() != "bytes":
+                raise ValueError("Only 'bytes' unit is supported")
+            start_str, _, end_str = range_spec.partition("-")
+            start = int(start_str) if start_str else 0
+            end = int(end_str) if end_str else file_size - 1
+        except Exception:
+            raise HTTPException(status_code=416, detail="Invalid Range header")
 
-    if start >= file_size or end >= file_size or start > end:
-        raise HTTPException(status_code=416, detail="Range Not Satisfiable")
+        if start >= file_size or end >= file_size or start > end:
+            raise HTTPException(status_code=416, detail="Range Not Satisfiable")
 
-    chunk_size = 1024 * 1024
-    content_length = end - start + 1
+        chunk_size = 1024 * 1024
+        content_length = end - start + 1
 
-    async def stream_range(path, start_pos, length):
-        remaining = length
-        async with aiofiles.open(path, mode="rb") as f:
-            await f.seek(start_pos)
-            while remaining > 0:
-                read_size = min(remaining, chunk_size)
-                data = await f.read(read_size)
-                if not data:
-                    break
-                remaining -= len(data)
-                yield data
+        async def stream_range(path, start_pos, length):
+            remaining = length
+            async with aiofiles.open(path, mode="rb") as f:
+                await f.seek(start_pos)
+                while remaining > 0:
+                    read_size = min(remaining, chunk_size)
+                    data = await f.read(read_size)
+                    if not data:
+                        break
+                    remaining -= len(data)
+                    yield data
 
-    content_range = f"bytes {start}-{end}/{file_size}"
-    headers = {
-        "Accept-Ranges": "bytes",
-        "Content-Range": content_range,
-        "Content-Length": str(content_length),
-    }
-
-    return StreamingResponse(
-        stream_range(str(media_path), start, content_length),
-        status_code=206,
-        media_type="video/mp4",
-        headers=headers,
-    )
-
-
-@app.head("/media/{file_name}")
-def head_media(file_name: str) -> Response:
-    """Respond to HEAD requests for media files to support pre-flight metadata inspection."""
-    media_path = settings.media_dir / file_name
-    if not media_path.exists() or not media_path.is_file():
-        raise HTTPException(status_code=404, detail="media not found")
-
-    file_size = media_path.stat().st_size
-    return Response(
-        status_code=200,
-        media_type="video/mp4",
-        headers={
+        content_range = f"bytes {start}-{end}/{file_size}"
+        headers = {
             "Accept-Ranges": "bytes",
-            "Content-Length": str(file_size),
-        },
-    )
+            "Content-Range": content_range,
+            "Content-Length": str(content_length),
+        }
+
+        return StreamingResponse(
+            stream_range(str(media_path), start, content_length),
+            status_code=206,
+            media_type="video/mp4",
+            headers=headers,
+        )
+
+
+    @app.head("/media/{file_name}")
+    def head_media(file_name: str) -> Response:
+        """Respond to HEAD requests for media files to support pre-flight metadata inspection."""
+        media_path = settings.media_dir / file_name
+        if not media_path.exists() or not media_path.is_file():
+            raise HTTPException(status_code=404, detail="media not found")
+
+        file_size = media_path.stat().st_size
+        return Response(
+            status_code=200,
+            media_type="video/mp4",
+            headers={
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(file_size),
+            },
+        )
 

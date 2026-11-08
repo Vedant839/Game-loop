@@ -64,6 +64,26 @@ def test_learner_service_tier_rises_to_three_on_consecutive_correct() -> None:
     assert tier == 3
 
 
+def test_v03_engine_streak_characterization() -> None:
+    """Characterization test: V0.3 difficulty engine streak signed dynamics remain unchanged."""
+    svc = LearnerService()
+    svc.get_or_create_profile("client_char", "user_char")
+
+    # Correct increments
+    svc.record_attempt("client_char", "user_char", "concept_a", is_correct=True, tier=2)
+    assert svc.get_or_create_profile("client_char", "user_char").streak == 1
+
+    svc.record_attempt("client_char", "user_char", "concept_a", is_correct=True, tier=2)
+    assert svc.get_or_create_profile("client_char", "user_char").streak == 2
+
+    # Incorrect resets to negative and decrements
+    svc.record_attempt("client_char", "user_char", "concept_a", is_correct=False, tier=2)
+    assert svc.get_or_create_profile("client_char", "user_char").streak == -1
+
+    svc.record_attempt("client_char", "user_char", "concept_a", is_correct=False, tier=2)
+    assert svc.get_or_create_profile("client_char", "user_char").streak == -2
+
+
 def test_learner_service_tier_override_bypasses_heuristic() -> None:
     svc = LearnerService()
     profile = svc.get_or_create_profile("c", "u_override")

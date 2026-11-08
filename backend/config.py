@@ -40,6 +40,22 @@ class Settings(BaseSettings):
         default=PROJECT_ROOT / "data" / "game_loop.db",
         validation_alias=AliasChoices("db_path", "GAME_LOOP_DB_PATH"),
     )
+    env: str = Field(
+        default="development",
+        validation_alias=AliasChoices("env", "ENV", "GAME_LOOP_ENV"),
+    )
+    turso_database_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("turso_database_url", "TURSO_DATABASE_URL"),
+    )
+    turso_auth_token: SecretStr | None = Field(
+        default=None,
+        validation_alias=AliasChoices("turso_auth_token", "TURSO_AUTH_TOKEN"),
+    )
+    creator_monthly_token_cap: int = Field(
+        default=500_000,
+        validation_alias=AliasChoices("creator_monthly_token_cap", "CREATOR_MONTHLY_TOKEN_CAP"),
+    )
 
     @property
     def project_root(self) -> Path:
