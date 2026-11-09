@@ -166,6 +166,32 @@ def test_skip_policy_and_missing_evidence(temp_db, sample_lecture):
     assert any(e["event_type"] == "intervention_skipped" for e in events)
 
 
+def test_record_skip_telemetry_payload_keys(temp_db):
+    learner = LearnerService(db=temp_db)
+    learner.record_attempt("acme", "dana", "math.angles", True, 1)
+    learner.record_skip(
+        client_id="acme",
+        user_id="dana",
+        session_id="session-skip-payload",
+        intervention_id="intv_1",
+        concept="math.angles",
+    )
+    skipped = [
+        event
+        for event in temp_db.export_telemetry(client_id="acme")
+        if event["event_type"] == "intervention_skipped"
+    ]
+    assert len(skipped) == 1
+    assert set(skipped[0]["payload"]) == {
+        "intervention_id",
+        "concept",
+        "missing_evidence",
+        "current_mastery",
+    }
+    assert skipped[0]["payload"]["missing_evidence"] is True
+    assert skipped[0]["payload"]["current_mastery"] == 0.6
+
+
 def test_required_policy_enforcement(temp_db, sample_lecture):
     mock_lectures = MockLectureService(sample_lecture)
     svc = SessionService(lecture_service=mock_lectures, db=temp_db)
