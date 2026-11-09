@@ -25,6 +25,7 @@ from backend.schemas.lecture import (
 )
 
 from backend.security_logging import add_api_key_redaction
+from backend.services.gemini_client import GeminiClient
 
 logger = logging.getLogger(__name__)
 add_api_key_redaction(logger)
@@ -281,7 +282,13 @@ class GeminiAuthoringError(Exception):
     """Raised when Gemini authoring fails after all retries."""
 
 
-def generate_interventions_with_gemini(lecture: Lecture, api_key: str) -> list[Intervention]:
+def generate_interventions_with_gemini(
+    lecture: Lecture,
+    api_key: str,
+    *,
+    creator_id: str = "default_client",
+    gemini_client: GeminiClient | None = None,
+) -> list[Intervention]:
     """Call Gemini to generate content-relevant interventions for *lecture*.
 
     Follows the SPEC §18 pipeline:
@@ -297,29 +304,32 @@ def generate_interventions_with_gemini(lecture: Lecture, api_key: str) -> list[I
     Returns the validated list of Intervention objects.
     Raises GeminiAuthoringError on unrecoverable failures.
     """
-    from google import genai  # deferred to avoid import cost when key is absent
     from google.genai import types
 
-    client = genai.Client(api_key=api_key, http_options={"timeout": 30000})
+    client = gemini_client or GeminiClient()
     prompt = _build_prompt(lecture)
 
     raw_text: str | None = None
-    last_error: Exception | None = None
-
     # SPEC §22: one retry on complete generation failure
     for attempt in range(2):
         try:
-            response = client.models.generate_content(
+            response = client.generate_content(
+                api_key=api_key,
+                creator_id=creator_id,
+                lecture_id=lecture.id,
+                event_type="lecture_generation",
                 model="gemini-3.8-flash",
                 contents=prompt,
                 config=types.GenerateContentConfig(response_mime_type="application/json"),
+                timeout_ms=30000,
             )
             raw_text = getattr(response, "text", None)
             if raw_text:
                 break
         except Exception as exc:
-            last_error = exc
-            logger.warning("Gemini call attempt %d failed: %s", attempt + 1, exc)
+            logger.warning(
+                "Gemini call attempt %d failed (%s)", attempt + 1, type(exc).__name__
+            )
 
     if not raw_text:
         raise GeminiAuthoringError(
@@ -329,8 +339,8 @@ def generate_interventions_with_gemini(lecture: Lecture, api_key: str) -> list[I
     # Parse JSON
     try:
         raw_items: list[dict[str, Any]] = _extract_json_array(raw_text)
-    except ValueError as exc:
-        raise GeminiAuthoringError(f"Failed to parse Gemini response as JSON array: {exc}") from exc
+    except ValueError:
+        raise GeminiAuthoringError("Failed to parse Gemini response as JSON array.") from None
 
     logger.info("Gemini returned %d raw intervention candidates", len(raw_items))
 

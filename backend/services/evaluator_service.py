@@ -23,6 +23,7 @@ from backend.schemas.session import InterventionStateEnum, SubmissionStatus
 from backend.services.learner_service import get_learner_service
 
 from backend.security_logging import add_api_key_redaction
+from backend.services.gemini_client import GeminiClient
 
 logger = logging.getLogger(__name__)
 add_api_key_redaction(logger)
@@ -39,6 +40,7 @@ class EvaluatorService:
     def __init__(self, db: Database | None = None) -> None:
         self.db = db or get_database()
         self.settings = get_settings()
+        self.gemini_client = GeminiClient(db=self.db, settings=self.settings)
         self._cache: dict[str, EvaluationOutput] = {}
 
     def _compute_cache_key(self, intervention_id: str, answer: str) -> str:
@@ -197,39 +199,26 @@ class EvaluatorService:
         if not key_value:
             return self.evaluate_offline_fallback(question, user_answer, rubric)
 
-        if (
-            self.db.creators.get_monthly_token_usage(creator_id)
-            >= self.settings.creator_monthly_token_cap
-        ):
-            logger.info("Monthly Gemini token cap reached; using offline evaluation.")
-            return self.evaluate_offline_fallback(question, user_answer, rubric)
-
-        estimated_tokens = max(
-            1,
-            (
-                len(question)
-                + len(user_answer)
-                + len(json.dumps(rubric or {}, ensure_ascii=False))
-            )
-            // 4,
-        )
-
+        self.gemini_client.settings = self.settings
         try:
             return await asyncio.wait_for(
-                asyncio.to_thread(self._invoke_gemini, key_value, question, user_answer, rubric),
+                asyncio.to_thread(
+                    self._invoke_gemini,
+                    key_value,
+                    question,
+                    user_answer,
+                    rubric,
+                    creator_id,
+                    lecture_id,
+                ),
                 timeout=5.0,
             )
         except Exception as exc:
-            logger.warning("Gemini evaluation failed or timed out (%s). Using deterministic rubric fallback.", exc)
-            return self.evaluate_offline_fallback(question, user_answer, rubric)
-        finally:
-            self.db.creators.log_usage(
-                str(uuid.uuid4()),
-                creator_id,
-                lecture_id,
-                "student_evaluation",
-                estimated_tokens,
+            logger.warning(
+                "Gemini evaluation failed or timed out (%s). Using deterministic rubric fallback.",
+                type(exc).__name__,
             )
+            return self.evaluate_offline_fallback(question, user_answer, rubric)
 
     def _invoke_gemini(
         self,
@@ -237,11 +226,10 @@ class EvaluatorService:
         question: str,
         user_answer: str,
         rubric: dict[str, Any] | None,
+        creator_id: str,
+        lecture_id: str,
     ) -> EvaluationOutput:
-        from google import genai
         from google.genai import types
-
-        client = genai.Client(api_key=api_key, http_options={"timeout": 6000})
 
         rubric_json = json.dumps(rubric or {}, indent=2)
         prompt = (
@@ -253,13 +241,18 @@ class EvaluatorService:
             "Return valid JSON matching the schema with score (0.0 to 1.0), is_correct (bool), formative_feedback (string, encouraging and constructive), and misconceptions_detected (list of string tags from rubric)."
         )
 
-        response = client.models.generate_content(
+        response = self.gemini_client.generate_content(
+            api_key=api_key,
+            creator_id=creator_id,
+            lecture_id=lecture_id,
+            event_type="student_evaluation",
             model="gemini-2.5-flash",
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=EvaluationOutput.model_json_schema(),
             ),
+            timeout_ms=6000,
         )
         text = getattr(response, "text", "")
         data = json.loads(text)

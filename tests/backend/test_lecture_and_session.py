@@ -75,7 +75,7 @@ def test_generate_interventions_refreshes_runtime_lecture_without_old_interventi
         api_key: str,
         target_count: int,
         max_count: int,
-        usage_callback=None,
+        **_kwargs,
     ) -> Lecture:
         captured["before_generate"] = lecture.interventions
         generated = lecture.model_copy(
@@ -102,8 +102,6 @@ def test_generate_interventions_refreshes_runtime_lecture_without_old_interventi
             },
             deep=True,
         )
-        if usage_callback:
-            usage_callback(generated.model_dump_json())
         return generated
 
     monkeypatch.setattr("backend.main.generate_interventions_with_gemini", fake_generate)
@@ -136,7 +134,6 @@ def test_generate_interventions_refreshes_runtime_lecture_without_old_interventi
 
     assert response.interventions[0].concept == "Fresh vector idea"
     assert captured["before_generate"] == []
-    assert get_database().creators.get_monthly_token_usage("test_creator") > 0
 
 
 def test_session_lifecycle_and_state_transitions() -> None:

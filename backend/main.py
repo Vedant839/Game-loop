@@ -36,6 +36,7 @@ from backend.schemas.session import (
 )
 from backend.services.lecture_service import get_lecture_service, _generate_for_lecture
 from backend.services.gemini_authoring_service import generate_interventions_with_gemini
+from backend.services.gemini_client import GeminiClient, GeminiQuotaExceeded
 from backend.services.session_service import SessionError, get_session_service
 from backend.services.learner_service import get_learner_service
 from backend.services.evaluator_service import get_evaluator_service
@@ -201,40 +202,32 @@ def generate_interventions_for_lecture(
     generation_lecture = canonical_lecture.model_copy(deep=True)
     generation_lecture.interventions = []
 
-    api_key = settings.gemini_api_key
-    if api_key is not None:
-        key_value = api_key.get_secret_value()
-        if key_value:
-            db = get_database()
-            creator_id = creator["creator_id"] if isinstance(creator, dict) else "default_client"
-            if (
-                db.creators.get_monthly_token_usage(creator_id)
-                >= settings.creator_monthly_token_cap
-            ):
-                raise HTTPException(status_code=429, detail="Monthly Gemini token cap reached")
-            source_size = len(generation_lecture.model_dump_json())
-
-            def record_gemini_usage(output_text: str) -> None:
-                db.creators.log_usage(
-                    str(uuid.uuid4()),
-                    creator_id,
-                    lecture_id,
-                    "lecture_generation",
-                    max(1, (source_size + len(output_text)) // 4),
-                )
-
-            try:
-                generated = generate_interventions_with_gemini(
-                    lecture=generation_lecture,
-                    api_key=key_value,
-                    target_count=max_count,
-                    max_count=max_count,
-                    usage_callback=record_gemini_usage,
-                )
-                service.set_runtime_lecture(generated)
-                return generated
-            except RuntimeError:
-                raise HTTPException(status_code=502, detail="Gemini generation failed") from None
+    x_gemini_key = request.headers.get("X-Gemini-Key")
+    api_key = (x_gemini_key or "").strip()
+    creator_supplied_key = bool(api_key)
+    if not api_key and settings.gemini_api_key is not None:
+        api_key = settings.gemini_api_key.get_secret_value()
+    if api_key:
+        db = get_database()
+        creator_id = creator["creator_id"] if isinstance(creator, dict) else "default_client"
+        gemini_client = GeminiClient(db=db, settings=settings)
+        try:
+            generated = generate_interventions_with_gemini(
+                lecture=generation_lecture,
+                api_key=api_key,
+                target_count=max_count,
+                max_count=max_count,
+                creator_id=creator_id,
+                db=db,
+                gemini_client=gemini_client,
+                enforce_monthly_cap=not creator_supplied_key,
+            )
+            service.set_runtime_lecture(generated)
+            return generated
+        except GeminiQuotaExceeded:
+            raise HTTPException(status_code=429, detail="Monthly Gemini token cap reached") from None
+        except RuntimeError:
+            raise HTTPException(status_code=502, detail="Gemini generation failed") from None
 
     # No API key configured — fall back to deterministic generator
     generated = _generate_for_lecture(generation_lecture, max_count)

@@ -586,9 +586,9 @@ gcloud run deploy game-loop-api \
 - [x] **P0.1: Repository Layer** — Create `backend/repositories/` (`base.py`, `session_repository.py`, `lecture_repository.py`, `submission_repository.py`, `telemetry_repository.py`, `creator_repository.py`). Route all SQL queries through repositories.
 - [x] **P0.2: Migration Runner & Backfill** — `scripts/migrate.py` applies the guarded V0.3 migration and backfills session `creator_id`/intervention `lecture_id`; `scripts/backfill_lectures.py` imports local lecture JSON into `lectures` with `creator_id='default_client'`. Both paths have idempotency coverage against temporary SQLite databases.
 - [x] **P0.3: Turso Driver Spike & Swap** — The `turso_serverless` DB-API spike verified remote access and concurrent writes. `GAME_LOOP_DATABASE_BACKEND=turso` selects the adapter; repository batches use DB-API `executemany`. Configure the Turso primary in the Cloud Run service region. Cloud Run same-region latency and remote rollback still require the Turso contract suite.
-- [x] **P0.4: Creator Auth & Quota Enforcement** — Implement `backend/auth.py`, `creator_tokens`, `scripts/create_token.py`, `scripts/revoke_token.py`. Implement monthly token cap check in `evaluator_service.py`. Gate V0.3 routes (`POST /api/lectures`, `GET /api/telemetry`, `GET /api/learners/{client_id}/{user_id}`).
+- [x] **P0.4: Creator Auth & Quota Enforcement** — Implement `backend/auth.py`, `creator_tokens`, `scripts/create_token.py`, `scripts/revoke_token.py`. Gate V0.3 routes (`POST /api/lectures`, `GET /api/telemetry`, `GET /api/learners/{client_id}/{user_id}`). All Gemini calls use `backend/services/gemini_client.py` for monthly cap checks and per-attempt usage logging; creator-supplied authoring keys bypass the app cap, and student evaluation falls back offline when capped or unavailable.
 - [x] **P0.5: Anonymous Learner Identity** : Namespaced learner identity uses localStorage, falling back to sessionStorage and then an in-memory ID on storage exceptions. A visible notice explains progress is saved for the tab only.
-- **Exit Gate:** Current baseline passes (87 backend, 21 frontend), plus P0 repository contract and storage fallback tests. Reconfirm counts at the next sprint boundary.
+- **Exit Gate:** Current baseline passes (88 backend, 21 frontend), plus P0 repository contract, storage fallback, and shared Gemini client tests. Turso contract tests remain unrun.
 
 ### P1 — Ingestion & Video Adapters
 - [ ] **P1.1: IngestPage & Caption Parsers** — Caption parsing and transcript timing validation are implemented; implement `frontend/src/studio/IngestPage.tsx` (URL input, SRT/VTT file dropzone, browser-side audio upload with creator's key, intensity selector, progress bar).
@@ -704,7 +704,7 @@ Statuses reflect the current implementation and latest local evidence. `NOT VERI
 
 | Criterion | Test name / evidence | Status |
 |---:|---|---|
-| 1 | Host full suites: backend 87 passed; frontend 21 passed | PASS |
+| 1 | Host full suites: backend 88 passed; frontend 21 passed | PASS |
 | 2 | Frontend Vitest suite: 21 passed | PASS |
 | 3 | Static SQL audit: SQL is confined to `backend/database.py` and `backend/repositories/` | PASS |
 | 4 | `test_v03_migration_is_guarded_and_idempotent` | PASS |
@@ -719,8 +719,8 @@ Statuses reflect the current implementation and latest local evidence. `NOT VERI
 | 13 | `test_no_api_route_accepts_uid_query_parameter` | PASS |
 | 14 | `test_submission_capability_is_bound_to_its_session` | PASS |
 | 15 | `test_session_creation_is_limited_by_rightmost_forwarded_ip` | PASS |
-| 16 | `test_monthly_token_cap_blocks_gemini_call`; `test_evaluator_over_cap_skips_gemini_and_uses_fallback` | PASS |
-| 17 | `test_simulated_gemini_failure_redacts_key_from_logs_and_response` | PASS |
+| 16 | `test_monthly_token_cap_blocks_gemini_call`; `test_evaluator_over_cap_skips_gemini_and_uses_fallback`; `test_gemini_client_logs_provider_usage_and_sanitizes_failures` | PASS |
+| 17 | `test_simulated_gemini_failure_redacts_key_from_logs_and_response`; `test_gemini_client_logs_provider_usage_and_sanitizes_failures` | PASS |
 | 18 | No prompt-injection rubric-bounds test found | NOT IMPLEMENTED |
 | 19 | No score-correction monotonicity test found | NOT IMPLEMENTED |
 | 20 | `test_sanitizer_removes_nested_student_secrets_without_mutating_source`; public and session route sanitization tests | PASS |

@@ -2,6 +2,7 @@
 
 import logging
 import asyncio
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -12,6 +13,11 @@ from backend import config
 from backend.database import get_database
 from backend.main import generate_interventions_for_lecture
 from backend.services.evaluator_service import EvaluatorService, EvaluationOutput
+from backend.services.gemini_client import (
+    GeminiClient,
+    GeminiProviderError,
+    GeminiQuotaExceeded,
+)
 from scripts.migrate import migrate_database
 
 
@@ -41,7 +47,18 @@ def test_monthly_token_cap_blocks_gemini_call(monkeypatch):
         gemini_api_key=SimpleNamespace(get_secret_value=lambda: "quota-test-key"),
         creator_monthly_token_cap=100,
     ))
-    monkeypatch.setattr(main, "generate_interventions_with_gemini", lambda **kwargs: pytest.fail("Gemini should not run over quota"))
+
+    def invoke_through_client(**kwargs):
+        return kwargs["gemini_client"].generate_content(
+            api_key=kwargs["api_key"],
+            creator_id=kwargs["creator_id"],
+            lecture_id="linear_algebra_vectors",
+            event_type="lecture_generation",
+            model="fake-model",
+            contents="prompt",
+        )
+
+    monkeypatch.setattr(main, "generate_interventions_with_gemini", invoke_through_client)
 
     with pytest.raises(HTTPException) as exc:
         generate_interventions_for_lecture(
@@ -65,8 +82,21 @@ def test_simulated_gemini_failure_redacts_key_from_logs_and_response(monkeypatch
 
     def fail_with_key(**kwargs):
         logging.getLogger("backend.services.gemini_authoring_service").warning("provider error echoed %s", secret)
-        kwargs["usage_callback"]("")
-        raise RuntimeError(f"provider failed using {secret}")
+        class FakeModels:
+            def generate_content(self, **_provider_kwargs):
+                raise RuntimeError(f"provider failed using {secret}")
+
+        kwargs["gemini_client"].provider_factory = lambda **_factory_kwargs: SimpleNamespace(
+            models=FakeModels()
+        )
+        return kwargs["gemini_client"].generate_content(
+            api_key=kwargs["api_key"],
+            creator_id=kwargs["creator_id"],
+            lecture_id="linear_algebra_vectors",
+            event_type="lecture_generation",
+            model="fake-model",
+            contents="prompt",
+        )
 
     monkeypatch.setattr(main, "generate_interventions_with_gemini", fail_with_key)
     with caplog.at_level(logging.WARNING):
@@ -92,20 +122,27 @@ def test_evaluator_logs_each_provider_call_and_uses_offline_fallback(monkeypatch
         gemini_api_key=SimpleNamespace(get_secret_value=lambda: "fake-key"),
         creator_monthly_token_cap=1000,
     )
+    evaluator.gemini_client.settings = evaluator.settings
     calls = {"n": 0}
 
-    def fake_invoke(*args):
-        calls["n"] += 1
-        if calls["n"] == 2:
-            raise RuntimeError("simulated provider failure")
-        return EvaluationOutput(
-            score=1.0,
-            is_correct=True,
-            formative_feedback="Good.",
-            misconceptions_detected=[],
-        )
+    class FakeModels:
+        def generate_content(self, **_kwargs):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise RuntimeError("simulated provider failure")
+            return SimpleNamespace(
+                text=json.dumps({
+                    "score": 1.0,
+                    "is_correct": True,
+                    "formative_feedback": "Good.",
+                    "misconceptions_detected": [],
+                }),
+                usage_metadata=SimpleNamespace(total_token_count=5),
+            )
 
-    monkeypatch.setattr(evaluator, "_invoke_gemini", fake_invoke)
+    evaluator.gemini_client.provider_factory = lambda **_kwargs: SimpleNamespace(
+        models=FakeModels()
+    )
     for _ in range(2):
         result = asyncio.run(
             evaluator._call_gemini_or_fallback(
@@ -132,10 +169,9 @@ def test_evaluator_over_cap_skips_gemini_and_uses_fallback(monkeypatch):
         gemini_api_key=SimpleNamespace(get_secret_value=lambda: "fake-key"),
         creator_monthly_token_cap=10,
     )
-    monkeypatch.setattr(
-        evaluator,
-        "_invoke_gemini",
-        lambda *args: pytest.fail("Gemini must not run over quota"),
+    evaluator.gemini_client.settings = evaluator.settings
+    evaluator.gemini_client.provider_factory = lambda **_kwargs: pytest.fail(
+        "Gemini must not run over quota"
     )
 
     result = asyncio.run(
@@ -151,7 +187,9 @@ def test_evaluator_over_cap_skips_gemini_and_uses_fallback(monkeypatch):
     assert db.creators.get_monthly_token_usage("quota_creator") == 10
 
 
-def test_authoring_usage_callback_runs_for_each_failed_model_call(monkeypatch):
+def test_authoring_usage_is_logged_for_each_failed_model_call(monkeypatch):
+    migrate_database(get_database().db_path)
+    db = get_database()
     from google import genai
 
     import backend.services.gemini_authoring_service as authoring
@@ -173,7 +211,6 @@ def test_authoring_usage_callback_runs_for_each_failed_model_call(monkeypatch):
 
     monkeypatch.setattr(genai, "Client", FakeClient)
     monkeypatch.setattr(authoring.time, "sleep", lambda _seconds: None)
-    usage_calls = []
     lecture = get_lecture_service().get_lecture("linear_algebra_vectors")
 
     with pytest.raises(RuntimeError, match="generation failed"):
@@ -181,8 +218,68 @@ def test_authoring_usage_callback_runs_for_each_failed_model_call(monkeypatch):
             lecture,
             api_key="fake-key",
             models=["fake-model"],
-            usage_callback=usage_calls.append,
+            db=db,
+            creator_id="authoring_creator",
         )
 
     assert models.calls == 2
-    assert usage_calls == ["", ""]
+    assert db.creators.get_monthly_token_usage("authoring_creator") > 1
+
+
+def test_gemini_client_logs_provider_usage_and_sanitizes_failures(caplog):
+    migrate_database(get_database().db_path)
+    db = get_database()
+    settings = SimpleNamespace(creator_monthly_token_cap=100)
+    response = SimpleNamespace(
+        text="ok", usage_metadata=SimpleNamespace(total_token_count=23)
+    )
+    client = GeminiClient(
+        db=db,
+        settings=settings,
+        provider_factory=lambda **_kwargs: SimpleNamespace(
+            models=SimpleNamespace(generate_content=lambda **_call: response)
+        ),
+    )
+
+    client.generate_content(
+        api_key="fake-key",
+        creator_id="client_test",
+        lecture_id="lecture",
+        event_type="student_evaluation",
+        model="fake-model",
+        contents="some prompt",
+    )
+    assert db.creators.get_monthly_token_usage("client_test") == 23
+    assert "api_key" not in vars(client)
+
+    secret = "creator-key-that-must-not-leak"
+    client.provider_factory = lambda **_kwargs: SimpleNamespace(
+        models=SimpleNamespace(
+            generate_content=lambda **_call: (_ for _ in ()).throw(
+                RuntimeError(f"provider echoed {secret}")
+            )
+        )
+    )
+    with pytest.raises(GeminiProviderError) as exc:
+        client.generate_content(
+            api_key=secret,
+            creator_id="client_test",
+            lecture_id="lecture",
+            event_type="student_evaluation",
+            model="fake-model",
+            contents="another prompt",
+        )
+    assert secret not in str(exc.value)
+    assert secret not in caplog.text
+    assert db.creators.get_monthly_token_usage("client_test") > 23
+
+    settings.creator_monthly_token_cap = db.creators.get_monthly_token_usage("client_test")
+    with pytest.raises(GeminiQuotaExceeded):
+        client.generate_content(
+            api_key=secret,
+            creator_id="client_test",
+            lecture_id="lecture",
+            event_type="student_evaluation",
+            model="fake-model",
+            contents="blocked prompt",
+        )

@@ -14,11 +14,12 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any, Callable
+from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
 from backend.security_logging import add_api_key_redaction
+from backend.services.gemini_client import GeminiClient, GeminiQuotaExceeded
 from backend.schemas.lecture import (
     Difficulty,
     Intervention,
@@ -329,48 +330,53 @@ def generate_interventions_with_gemini(
     target_count: int = 4,
     max_count: int = 6,
     models: list[str] | None = None,
-    usage_callback: Callable[[str], None] | None = None,
+    creator_id: str = "default_client",
+    db: Any = None,
+    gemini_client: GeminiClient | None = None,
+    enforce_monthly_cap: bool = True,
 ) -> Lecture:
     """Call Gemini to generate lecture-specific diverse interventions."""
-    from google import genai
     from google.genai import types
 
-    client = genai.Client(api_key=api_key, http_options={"timeout": 45000})
+    client = gemini_client or GeminiClient(db=db)
 
     prompt = _build_prompt(lecture, target_count, max_count)
     response_schema = _GeminiInterventionSet.model_json_schema()
     models_to_try = models or SUPPORTED_GEMINI_MODELS
 
     def _call(model_name: str) -> str | None:
-        text = ""
-        try:
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=response_schema,
-                ),
-            )
-            text = getattr(response, "text", None) or ""
-            return text or None
-        finally:
-            if usage_callback is not None:
-                usage_callback(text)
+        response = client.generate_content(
+            api_key=api_key,
+            creator_id=creator_id,
+            lecture_id=lecture.id,
+            event_type="lecture_generation",
+            model=model_name,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=response_schema,
+            ),
+            timeout_ms=45000,
+            enforce_monthly_cap=enforce_monthly_cap,
+        )
+        text = getattr(response, "text", None) or ""
+        return text or None
 
     raw_text: str | None = None
-    last_exc: Exception | None = None
-
     for model_name in models_to_try:
         for attempt in range(1, 3):
             try:
                 raw_text = _call(model_name)
                 if raw_text:
                     break
+            except GeminiQuotaExceeded:
+                raise
             except Exception as exc:  # noqa: BLE001
-                last_exc = exc
                 logger.warning(
-                    "Gemini call (%s) attempt %d failed: %s", model_name, attempt, exc
+                    "Gemini call (%s) attempt %d failed (%s)",
+                    model_name,
+                    attempt,
+                    type(exc).__name__,
                 )
                 if attempt == 1:
                     time.sleep(1.5)
@@ -383,8 +389,8 @@ def generate_interventions_with_gemini(
     try:
         data: Any = json.loads(raw_text)
         intervention_set = _GeminiInterventionSet.model_validate(data)
-    except Exception as exc:
-        raise RuntimeError(f"Failed to parse Gemini response as JSON: {exc}") from exc
+    except Exception:
+        raise RuntimeError("Failed to parse Gemini response as JSON.") from None
 
     valid_interventions = _validate_and_filter(
         raw=intervention_set.interventions,
