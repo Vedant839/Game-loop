@@ -85,8 +85,16 @@ export async function createLecture(lecture: Lecture): Promise<Lecture> {
   return (await response.json()) as Lecture;
 }
 
+let tabOnlyProgress = false;
+const memoryLearnerIds = new Map<string, string>();
+
+export function hasTabOnlyProgress(): boolean {
+  return tabOnlyProgress;
+}
+
 export function getLearnerId(creatorId = "default_client"): string {
   const key = `gl_learner_${creatorId}`;
+  tabOnlyProgress = false;
   try {
     const existing = window.localStorage.getItem(key);
     if (existing) return existing;
@@ -94,7 +102,21 @@ export function getLearnerId(creatorId = "default_client"): string {
     window.localStorage.setItem(key, learnerId);
     return learnerId;
   } catch {
-    throw new Error("Progress cannot be saved because browser local storage is unavailable.");
+    tabOnlyProgress = true;
+  }
+
+  try {
+    const existing = window.sessionStorage.getItem(key);
+    if (existing) return existing;
+    const learnerId = window.crypto.randomUUID();
+    window.sessionStorage.setItem(key, learnerId);
+    return learnerId;
+  } catch {
+    const existing = memoryLearnerIds.get(key);
+    if (existing) return existing;
+    const learnerId = window.crypto.randomUUID();
+    memoryLearnerIds.set(key, learnerId);
+    return learnerId;
   }
 }
 

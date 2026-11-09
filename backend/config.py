@@ -52,6 +52,10 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("turso_auth_token", "TURSO_AUTH_TOKEN"),
     )
+    database_backend: str = Field(
+        default="sqlite",
+        validation_alias=AliasChoices("database_backend", "GAME_LOOP_DATABASE_BACKEND"),
+    )
     creator_monthly_token_cap: int = Field(
         default=500_000,
         validation_alias=AliasChoices("creator_monthly_token_cap", "CREATOR_MONTHLY_TOKEN_CAP"),

@@ -7,6 +7,7 @@ import {
   fetchLectures,
   generateInterventions,
   getApiBaseUrl,
+  hasTabOnlyProgress,
 } from "./api";
 import Player from "./Player";
 import type { Lecture, LectureSummary, SessionState } from "./types";
@@ -85,6 +86,7 @@ export default function App() {
   const [selectedLecture, setSelectedLecture] = useState<Lecture | null>(null);
   const [sessionState, setSessionState] = useState<SessionState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tabOnlyProgress, setTabOnlyProgress] = useState(false);
   const [generationState, setGenerationState] = useState<GenerationState>("idle");
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [showAddLectureForm, setShowAddLectureForm] = useState(false);
@@ -138,6 +140,7 @@ export default function App() {
 
         const newSession = await createSession(selectedLectureId!);
         if (!isCurrent) return;
+        setTabOnlyProgress(hasTabOnlyProgress());
         setSessionState(newSession);
       } catch (err) {
         if (isCurrent) {
@@ -220,6 +223,9 @@ export default function App() {
   return (
     <main>
       <h1>game-loop</h1>
+      {tabOnlyProgress && (
+        <p role="status">Progress saved for this tab only. It may not be available after you close this tab.</p>
+      )}
 
       <div className={`status-badge ${connectionState}`}>
         {connectionState === "connecting" && "Connecting to backend..."}

@@ -143,13 +143,29 @@ def _add_column_if_missing(
 def migrate_database(db_path: Path | str) -> bool:
     """Apply V0.4 schema once. Return True only when a migration was applied."""
     path = Path(db_path)
-    if not path.is_file():
+    settings = get_settings()
+    if settings.database_backend.lower() == "sqlite" and not path.is_file():
         raise FileNotFoundError(f"Database does not exist: {path}")
 
-    conn = sqlite3.connect(path, timeout=30.0)
+    if settings.database_backend.lower() == "turso":
+        if not settings.turso_database_url or not settings.turso_auth_token:
+            raise RuntimeError("TURSO_DATABASE_URL and TURSO_AUTH_TOKEN are required for Turso")
+        try:
+            import turso_serverless
+        except ImportError as exc:
+            raise RuntimeError("Install turso-serverless to migrate Turso") from exc
+        conn = turso_serverless.connect(
+            settings.turso_database_url,
+            auth_token=settings.turso_auth_token.get_secret_value(),
+        )
+    else:
+        conn = sqlite3.connect(path, timeout=30.0)
     try:
-        conn.execute("PRAGMA foreign_keys = ON")
-        conn.execute("BEGIN IMMEDIATE")
+        if settings.database_backend.lower() == "sqlite":
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute("BEGIN IMMEDIATE")
+        else:
+            conn.execute("BEGIN")
         conn.execute(
             """CREATE TABLE IF NOT EXISTS schema_migrations (
                 version INTEGER PRIMARY KEY,

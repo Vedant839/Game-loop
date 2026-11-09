@@ -80,7 +80,10 @@ class SessionService:
         self.db = db or get_database()
         self._sessions: dict[str, RuntimeSession] = {}
 
-    def _persist_session(self, session: RuntimeSession) -> None:
+    def _persist_session(
+        self, session: RuntimeSession, learner_profile: Any | None = None,
+        pending_submission: dict[str, Any] | None = None,
+    ) -> None:
         completed_json = {
             k: v.model_dump_json() for k, v in session.completed_submissions.items()
         }
@@ -96,6 +99,19 @@ class SessionService:
             active_intervention_tier=session.active_intervention_tier,
             interventions_state=interventions_state,
             completed_submissions=completed_json,
+            pending_submission=pending_submission,
+            learner_profile=(
+                {
+                    "client_id": learner_profile.client_id,
+                    "user_id": learner_profile.user_id,
+                    "concept_mastery": learner_profile.concept_mastery,
+                    "streak": learner_profile.streak,
+                    "friction_index": learner_profile.friction_index,
+                    "total_interventions": learner_profile.total_interventions,
+                    "total_correct": learner_profile.total_correct,
+                }
+                if learner_profile is not None else None
+            ),
         )
 
     def _get_or_load_session(self, session_id: str) -> RuntimeSession:
@@ -187,7 +203,8 @@ class SessionService:
         return session.get_state()
 
     def skip_intervention(
-        self, session_id: str, intervention_id: str, reason: str = "learner_choice"
+        self, session_id: str, intervention_id: str, reason: str = "learner_choice",
+        write_telemetry: bool = True,
     ) -> SessionState:
         """Explicitly skip an intervention per SPEC.md §55.3.
         
@@ -233,6 +250,7 @@ class SessionService:
             session_id=session.session_id,
             intervention_id=target_intv.id,
             concept=target_intv.concept,
+            write_telemetry=write_telemetry,
         )
 
         self._persist_session(session)
@@ -375,7 +393,9 @@ class SessionService:
             target_intv.concept,
             is_correct,
             tier,
+            persist=False,
         )
+        updated_profile = learner_svc.get_or_create_profile(session.client_id, session.external_user_id)
 
         # Transition state ACTIVE -> COMPLETED
         session.interventions_state[intervention_id] = InterventionStateEnum.COMPLETED
@@ -394,7 +414,7 @@ class SessionService:
 
         # Store for idempotency
         session.completed_submissions[idempotency_key] = result
-        self._persist_session(session)
+        self._persist_session(session, learner_profile=updated_profile)
         return result
 
     def submit_experiment(
@@ -439,7 +459,9 @@ class SessionService:
             target_intv.concept,
             is_correct,
             tier,
+            persist=False,
         )
+        updated_profile = learner_svc.get_or_create_profile(session.client_id, session.external_user_id)
 
         session.interventions_state[intervention_id] = InterventionStateEnum.COMPLETED
         session.active_intervention_id = None
@@ -455,7 +477,7 @@ class SessionService:
             suggested_next_tier=next_tier,
         )
         session.completed_submissions[submission.idempotency_key] = result
-        self._persist_session(session)
+        self._persist_session(session, learner_profile=updated_profile)
         return result
 
     def _build_active_payload(

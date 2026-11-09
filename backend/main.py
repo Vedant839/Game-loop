@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime, timezone
 import uuid
 from typing import Any
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 import aiofiles
@@ -276,13 +276,32 @@ def get_learner_profile(
     response_model=SessionState,
 )
 def skip_intervention(
-    session_id: str, intervention_id: str, req: SkipInterventionRequest | None = None
+    session_id: str, intervention_id: str, background_tasks: BackgroundTasks,
+    req: SkipInterventionRequest | None = None
 ) -> SessionState:
     """Explicitly skip an intervention if permitted by policy."""
     session_service = get_session_service()
     reason = req.reason if req and req.reason else "learner_choice"
     try:
-        return session_service.skip_intervention(session_id, intervention_id, reason=reason)
+        state = session_service.skip_intervention(
+            session_id, intervention_id, reason=reason, write_telemetry=False
+        )
+        session = session_service._get_or_load_session(session_id)
+        intervention = next(i for i in session.lecture.interventions if i.id == intervention_id)
+        def record_skip_telemetry() -> None:
+            db = get_database()
+            profile = get_learner_service(db).get_or_create_profile(
+                session.client_id, session.external_user_id
+            )
+            db.record_telemetry(
+                client_id=session.client_id, session_id=session_id,
+                user_id=session.external_user_id, event_type="intervention_skipped",
+                payload={"intervention_id": intervention_id, "concept": intervention.concept,
+                         "missing_evidence": True,
+                         "current_mastery": profile.concept_mastery.get(intervention.concept, 0.5)},
+            )
+        background_tasks.add_task(record_skip_telemetry)
+        return state
     except SessionError as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)
 
@@ -292,8 +311,8 @@ def skip_intervention(
     response_model=OpenEndedSubmissionResponse,
     status_code=status.HTTP_202_ACCEPTED,
 )
-async def submit_open_ended(
-    session_id: str, req: OpenEndedSubmissionRequest
+def submit_open_ended(
+    session_id: str, req: OpenEndedSubmissionRequest, background_tasks: BackgroundTasks
 ) -> OpenEndedSubmissionResponse:
     """Submit open-ended freeform answer for asynchronous AI evaluation."""
     session_service = get_session_service()
@@ -341,24 +360,26 @@ async def submit_open_ended(
         # Optimistic resume: unlock video playhead
         session.active_intervention_id = None
     session.version += 1
-    session_service._persist_session(session)
-
     rubric_dict = target_intv.rubric.model_dump() if getattr(target_intv, "rubric", None) else None
 
-    # Save initial pending submission in SQLite
-    db.save_submission(
-        submission_id=submission_id,
-        session_id=session_id,
-        intervention_id=intervention_id,
-        idempotency_key=req.idempotency_key,
-        user_answer=req.user_answer,
-        status=SubmissionStatus.PENDING.value,
-        resumption_policy=resumption_policy.value,
+    # Persist the session transition and pending submission in one atomic batch.
+    session_service._persist_session(
+        session,
+        pending_submission={
+            "submission_id": submission_id,
+            "session_id": session_id,
+            "intervention_id": intervention_id,
+            "idempotency_key": req.idempotency_key,
+            "user_answer": req.user_answer,
+            "status": SubmissionStatus.PENDING.value,
+            "resumption_policy": resumption_policy.value,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        },
     )
 
     # Dispatch async background task
-    asyncio.create_task(
-        evaluator_service.evaluate_submission_async(
+    def evaluate_in_worker() -> None:
+        asyncio.run(evaluator_service.evaluate_submission_async(
             submission_id=submission_id,
             session_id=session_id,
             intervention_id=intervention_id,
@@ -369,8 +390,9 @@ async def submit_open_ended(
             user_id=session.external_user_id,
             concept=target_intv.concept,
             tier=tier,
-        )
-    )
+        ))
+
+    background_tasks.add_task(evaluate_in_worker)
 
     return OpenEndedSubmissionResponse(
         submission_id=submission_id,

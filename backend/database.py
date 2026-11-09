@@ -36,6 +36,7 @@ class Database:
         if str(self.db_path) != ":memory:":
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
+        self.backend = get_settings().database_backend.lower()
         self._lock = threading.Lock()
         self._init_db()
 
@@ -48,13 +49,27 @@ class Database:
         self.creators = CreatorRepository(self)
 
     @contextmanager
-    def connection(self) -> Generator[sqlite3.Connection, None, None]:
-        conn = sqlite3.connect(
-            str(self.db_path),
-            check_same_thread=False,
-            timeout=30.0,
-        )
-        conn.row_factory = sqlite3.Row
+    def connection(self) -> Generator[Any, None, None]:
+        if self.backend == "turso":
+            settings = get_settings()
+            if not settings.turso_database_url or not settings.turso_auth_token:
+                raise RuntimeError("TURSO_DATABASE_URL and TURSO_AUTH_TOKEN are required for Turso")
+            try:
+                import turso_serverless
+            except ImportError as exc:
+                raise RuntimeError("Install turso-serverless to use the Turso backend") from exc
+            conn = turso_serverless.connect(
+                settings.turso_database_url,
+                auth_token=settings.turso_auth_token.get_secret_value(),
+            )
+            conn.row_factory = turso_serverless.Row
+        elif self.backend == "sqlite":
+            conn = sqlite3.connect(
+                str(self.db_path), check_same_thread=False, timeout=30.0
+            )
+            conn.row_factory = sqlite3.Row
+        else:
+            raise ValueError(f"Unsupported database backend: {self.backend}")
         try:
             yield conn
             conn.commit()
@@ -64,16 +79,50 @@ class Database:
         finally:
             conn.close()
 
+    def execute_batch(
+        self,
+        statements: list[tuple[str, tuple[Any, ...]]],
+        *,
+        transactional: bool = True,
+    ) -> list[Any]:
+        """Run ordered statements on one connection.
+
+        turso-serverless 0.1.0 has no ``Connection.batch``. Each ``execute``
+        is its own ``POST /v3/cursor``. The connection's session baton keeps
+        one server transaction open across those calls when implicit BEGIN is
+        enabled; ``connection()`` then commits it, or rolls it back if any
+        statement raises. A transactional DML batch of N statements therefore
+        costs N + 3 HTTP requests: BEGIN, N statements, COMMIT, and stream
+        close. A non-transactional batch does not BEGIN or COMMIT, so it costs
+        N statement requests plus close, and earlier statements stay applied
+        if a later one fails.
+        """
+        with self.connection() as conn:
+            if self.backend == "turso" and not transactional:
+                conn.isolation_level = None
+            return [conn.execute(sql, parameters) for sql, parameters in statements]
+
+    def _execute_script(self, conn: Any, script: str) -> None:
+        """Execute DDL. Turso's public executescript is one pipeline POST."""
+        if self.backend == "turso":
+            conn.executescript(script)
+            return
+        for statement in script.split(";"):
+            if statement.strip():
+                conn.execute(statement)
+
     def _init_db(self) -> None:
         """Create tables and initialize WAL mode."""
         with self._lock:
             with self.connection() as conn:
-                if str(self.db_path) != ":memory:":
-                    conn.execute("PRAGMA journal_mode = WAL;")
-                conn.execute("PRAGMA synchronous = NORMAL;")
-                conn.execute("PRAGMA foreign_keys = ON;")
+                if self.backend == "sqlite":
+                    if str(self.db_path) != ":memory:":
+                        conn.execute("PRAGMA journal_mode = WAL;")
+                    conn.execute("PRAGMA synchronous = NORMAL;")
+                    conn.execute("PRAGMA foreign_keys = ON;")
 
-                conn.executescript(
+                self._execute_script(
+                    conn,
                     """
                     CREATE TABLE IF NOT EXISTS tenants (
                         client_id TEXT PRIMARY KEY,
@@ -172,6 +221,8 @@ class Database:
         active_intervention_tier: int,
         interventions_state: dict[str, str],
         completed_submissions: dict[str, str],
+        learner_profile: dict[str, Any] | None = None,
+        pending_submission: dict[str, Any] | None = None,
     ) -> None:
         """Persist or update complete runtime session."""
         with self._lock:
@@ -186,6 +237,8 @@ class Database:
                 active_intervention_tier=active_intervention_tier,
                 interventions_state=interventions_state,
                 completed_submissions=completed_submissions,
+                learner_profile=learner_profile,
+                pending_submission=pending_submission,
             )
 
     def load_session(self, session_id: str) -> dict[str, Any] | None:
@@ -291,10 +344,44 @@ class Database:
                 timestamp=timestamp,
             )
 
+
+    def delete_learner(self, client_id: str, user_id: str) -> int:
+        """Atomically remove a learner, their sessions, submissions, and telemetry."""
+        with self.connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            rows = conn.execute(
+                "SELECT session_id FROM sessions WHERE client_id = ? AND external_user_id = ?",
+                (client_id, user_id),
+            ).fetchall()
+            session_ids = [row["session_id"] for row in rows]
+            for session_id in session_ids:
+                conn.execute("DELETE FROM completed_submissions WHERE session_id = ?", (session_id,))
+                conn.execute("DELETE FROM session_interventions WHERE session_id = ?", (session_id,))
+                conn.execute("DELETE FROM submissions WHERE session_id = ?", (session_id,))
+                conn.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
+            conn.execute(
+                "DELETE FROM telemetry_events WHERE client_id = ? AND user_id = ?",
+                (client_id, user_id),
+            )
+            profile = conn.execute(
+                "DELETE FROM learner_profiles WHERE client_id = ? AND user_id = ?",
+                (client_id, user_id),
+            )
+            return len(session_ids) + max(profile.rowcount, 0)
+
     def export_telemetry(
         self, client_id: str | None = None, limit: int = 100
     ) -> list[dict[str, Any]]:
         return self.telemetry.export_telemetry(client_id=client_id, limit=limit)
+
+
+class TursoDatabase(Database):
+    """Remote Turso implementation of the repository database contract."""
+
+    def __init__(self, db_path: Path | str | None = None) -> None:
+        if get_settings().database_backend.lower() != "turso":
+            raise ValueError("Set GAME_LOOP_DATABASE_BACKEND=turso to construct TursoDatabase")
+        super().__init__(db_path)
 
 
 _db_instance: Database | None = None
@@ -302,6 +389,8 @@ _db_instance: Database | None = None
 
 def get_database(db_path: Path | str | None = None) -> Database:
     global _db_instance
-    if _db_instance is None or db_path is not None:
-        _db_instance = Database(db_path)
+    settings = get_settings()
+    expected_type = TursoDatabase if settings.database_backend.lower() == "turso" else Database
+    if _db_instance is None or db_path is not None or type(_db_instance) is not expected_type:
+        _db_instance = expected_type(db_path)
     return _db_instance

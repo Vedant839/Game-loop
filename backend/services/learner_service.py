@@ -88,6 +88,7 @@ class LearnerService:
         is_correct: bool,
         tier: int,
         friction_seconds: float = 0.0,
+        persist: bool = True,
     ) -> tuple[float, int]:
         """Update learner mastery and calculate delta and recommended next tier."""
         profile = self.get_or_create_profile(client_id, user_id)
@@ -106,7 +107,8 @@ class LearnerService:
         profile.concept_mastery[concept] = new_mastery
         profile.total_interventions += 1
 
-        self._persist_profile(profile)
+        if persist:
+            self._persist_profile(profile)
 
         mastery_delta = round(new_mastery - old_mastery, 2)
         next_tier = self.resolve_intervention_tier(profile, concept)
@@ -130,6 +132,7 @@ class LearnerService:
         session_id: str,
         intervention_id: str,
         concept: str,
+        write_telemetry: bool = True,
     ) -> None:
         """Record an explicit intervention skip.
         
@@ -138,18 +141,16 @@ class LearnerService:
         """
         profile = self.get_or_create_profile(client_id, user_id)
         # Mastery and streak remain untouched (missing evidence).
-        self.db.record_telemetry(
-            client_id=client_id,
-            session_id=session_id,
-            user_id=user_id,
-            event_type="intervention_skipped",
-            payload={
-                "intervention_id": intervention_id,
-                "concept": concept,
-                "missing_evidence": True,
-                "current_mastery": profile.concept_mastery.get(concept, 0.5),
-            },
-        )
+        if write_telemetry:
+            self.db.record_telemetry(
+                client_id=client_id, session_id=session_id, user_id=user_id,
+                event_type="intervention_skipped",
+                payload={
+                    "intervention_id": intervention_id, "concept": concept,
+                    "missing_evidence": True,
+                    "current_mastery": profile.concept_mastery.get(concept, 0.5),
+                },
+            )
         logger.info(
             "Learner (%s:%s) skipped intervention '%s' (concept: '%s') - recorded as missing evidence",
             client_id,

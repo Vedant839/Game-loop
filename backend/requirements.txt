@@ -5,3 +5,5 @@ pydantic-settings>=2.13,<3
 pytest>=9,<10
 uvicorn[standard]>=0.41,<0.42
 aiofiles
+
+turso-serverless>=0.1,<0.2
