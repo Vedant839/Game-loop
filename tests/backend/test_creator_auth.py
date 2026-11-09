@@ -1,11 +1,13 @@
 ﻿"""Coverage for DB-backed creator authentication and tenant boundaries."""
 
 import hashlib
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
 from backend.database import get_database
 from backend.main import app
+from backend.database import DatabaseUnavailableError
 from scripts.create_token import create_token
 from scripts.revoke_token import revoke_token
 from scripts.migrate import migrate_database
@@ -17,6 +19,24 @@ def test_creator_routes_reject_missing_token():
     assert client.get("/api/telemetry").status_code == 401
     assert client.get("/api/learners/default_client/learner").status_code == 401
     assert client.post("/api/lectures", json={}).status_code == 401
+
+
+def test_database_unavailability_during_auth_returns_503(monkeypatch):
+    import backend.auth as auth
+
+    def unavailable(_token_hash):
+        raise DatabaseUnavailableError("database unreachable")
+
+    monkeypatch.setattr(
+        auth,
+        "get_database",
+        lambda: SimpleNamespace(creators=SimpleNamespace(get_token=unavailable)),
+    )
+    response = client.get(
+        "/api/telemetry", headers={"Authorization": "Bearer valid-shaped-token"}
+    )
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Database temporarily unavailable"}
 
 
 def test_token_cli_creates_hashed_token_and_revocation_is_enforced():

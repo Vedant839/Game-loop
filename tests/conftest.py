@@ -16,6 +16,8 @@ def isolate_test_db(tmp_path, monkeypatch):
     """Ensure every test has an isolated SQLite database and reset service singletons."""
     test_db_path = tmp_path / "test_game_loop.db"
     monkeypatch.setenv("GAME_LOOP_DB_PATH", str(test_db_path))
+    monkeypatch.setenv("GAME_LOOP_DATABASE_BACKEND", "sqlite")
+    monkeypatch.setenv("GEMINI_API_KEY", "")
     get_settings.cache_clear()
 
     # Reset singletons

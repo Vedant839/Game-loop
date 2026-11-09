@@ -11,6 +11,7 @@ import hashlib
 import json
 import logging
 import time
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -108,6 +109,7 @@ class EvaluatorService:
         user_id: str,
         concept: str,
         tier: int,
+        lecture_id: str | None = None,
     ) -> EvaluationOutput:
         """Asynchronously grade student answer via Gemini (with caching and timeout fallback)."""
         cache_key = self._compute_cache_key(intervention_id, user_answer)
@@ -116,7 +118,13 @@ class EvaluatorService:
         if cache_key in self._cache:
             eval_result = self._cache[cache_key]
         else:
-            eval_result = await self._call_gemini_or_fallback(question, user_answer, rubric)
+            eval_result = await self._call_gemini_or_fallback(
+                question,
+                user_answer,
+                rubric,
+                creator_id=client_id,
+                lecture_id=lecture_id or "unknown",
+            )
             self._cache[cache_key] = eval_result
 
         latency_ms = int((time.time() - start_time) * 1000)
@@ -175,6 +183,9 @@ class EvaluatorService:
         question: str,
         user_answer: str,
         rubric: dict[str, Any] | None,
+        *,
+        creator_id: str = "default_client",
+        lecture_id: str = "unknown",
     ) -> EvaluationOutput:
         api_key = self.settings.gemini_api_key
         if not api_key:
@@ -184,6 +195,23 @@ class EvaluatorService:
         if not key_value:
             return self.evaluate_offline_fallback(question, user_answer, rubric)
 
+        if (
+            self.db.creators.get_monthly_token_usage(creator_id)
+            >= self.settings.creator_monthly_token_cap
+        ):
+            logger.info("Monthly Gemini token cap reached; using offline evaluation.")
+            return self.evaluate_offline_fallback(question, user_answer, rubric)
+
+        estimated_tokens = max(
+            1,
+            (
+                len(question)
+                + len(user_answer)
+                + len(json.dumps(rubric or {}, ensure_ascii=False))
+            )
+            // 4,
+        )
+
         try:
             return await asyncio.wait_for(
                 asyncio.to_thread(self._invoke_gemini, key_value, question, user_answer, rubric),
@@ -192,6 +220,14 @@ class EvaluatorService:
         except Exception as exc:
             logger.warning("Gemini evaluation failed or timed out (%s). Using deterministic rubric fallback.", exc)
             return self.evaluate_offline_fallback(question, user_answer, rubric)
+        finally:
+            self.db.creators.log_usage(
+                str(uuid.uuid4()),
+                creator_id,
+                lecture_id,
+                "student_evaluation",
+                estimated_tokens,
+            )
 
     def _invoke_gemini(
         self,

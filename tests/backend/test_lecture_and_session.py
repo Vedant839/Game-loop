@@ -70,9 +70,15 @@ def test_generate_interventions_refreshes_runtime_lecture_without_old_interventi
 
     captured: dict[str, list[Intervention]] = {}
 
-    def fake_generate(lecture: Lecture, api_key: str, target_count: int, max_count: int) -> Lecture:
+    def fake_generate(
+        lecture: Lecture,
+        api_key: str,
+        target_count: int,
+        max_count: int,
+        usage_callback=None,
+    ) -> Lecture:
         captured["before_generate"] = lecture.interventions
-        return lecture.model_copy(
+        generated = lecture.model_copy(
             update={
                 "interventions": [
                     Intervention(
@@ -96,6 +102,9 @@ def test_generate_interventions_refreshes_runtime_lecture_without_old_interventi
             },
             deep=True,
         )
+        if usage_callback:
+            usage_callback(generated.model_dump_json())
+        return generated
 
     monkeypatch.setattr("backend.main.generate_interventions_with_gemini", fake_generate)
     monkeypatch.setattr(
@@ -109,12 +118,25 @@ def test_generate_interventions_refreshes_runtime_lecture_without_old_interventi
     from backend.database import get_database
     from scripts.migrate import migrate_database
     migrate_database(get_database().db_path)
+    from starlette.requests import Request
     response = generate_interventions_for_lecture(
-        "linear_algebra_vectors", creator={"creator_id": "test_creator"}
+        request=Request({
+            "type": "http",
+            "method": "POST",
+            "path": "/api/lectures/linear_algebra_vectors/generate_interventions",
+            "headers": [],
+            "client": ("testclient", 1234),
+            "server": ("testserver", 80),
+            "scheme": "http",
+            "query_string": b"",
+        }),
+        lecture_id="linear_algebra_vectors",
+        creator={"creator_id": "test_creator"},
     )
 
     assert response.interventions[0].concept == "Fresh vector idea"
     assert captured["before_generate"] == []
+    assert get_database().creators.get_monthly_token_usage("test_creator") > 0
 
 
 def test_session_lifecycle_and_state_transitions() -> None:

@@ -5,6 +5,8 @@ from typing import Any
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 import aiofiles
 import math
 
@@ -35,11 +37,18 @@ from backend.services.gemini_authoring_service import generate_interventions_wit
 from backend.services.session_service import SessionError, get_session_service
 from backend.services.learner_service import get_learner_service
 from backend.services.evaluator_service import get_evaluator_service
+from backend.rate_limit import (
+    get_creator_rate_limit_key,
+    get_real_client_ip,
+    limiter,
+)
 
 settings = get_settings()
 
 
 app = FastAPI(title="game-loop API", version="0.1.0")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -67,8 +76,11 @@ def get_health() -> dict[str, str]:
 
 
 @app.post("/api/lectures", response_model=Lecture, status_code=status.HTTP_201_CREATED)
+@limiter.limit("120/minute", key_func=get_creator_rate_limit_key)
 def create_lecture(
-    lecture: Lecture, _creator: dict[str, str] = Depends(require_creator)
+    request: Request,
+    lecture: Lecture,
+    _creator: dict[str, str] = Depends(require_creator),
 ) -> Lecture:
     """Create a custom lecture definition and persist it on disk."""
     service = get_lecture_service()
@@ -99,7 +111,9 @@ def get_lecture(lecture_id: str) -> Lecture:
 
 
 @app.post("/api/lectures/{lecture_id}/generate_interventions", response_model=Lecture)
+@limiter.limit("10/minute", key_func=get_creator_rate_limit_key)
 def generate_interventions_for_lecture(
+    request: Request,
     lecture_id: str,
     max_count: int = 4,
     creator: dict[str, str] = Depends(require_creator),
@@ -134,29 +148,26 @@ def generate_interventions_for_lecture(
                 >= settings.creator_monthly_token_cap
             ):
                 raise HTTPException(status_code=429, detail="Monthly Gemini token cap reached")
+            source_size = len(generation_lecture.model_dump_json())
+
+            def record_gemini_usage(output_text: str) -> None:
+                db.creators.log_usage(
+                    str(uuid.uuid4()),
+                    creator_id,
+                    lecture_id,
+                    "lecture_generation",
+                    max(1, (source_size + len(output_text)) // 4),
+                )
+
             try:
                 generated = generate_interventions_with_gemini(
                     lecture=generation_lecture,
                     api_key=key_value,
                     target_count=max_count,
                     max_count=max_count,
+                    usage_callback=record_gemini_usage,
                 )
                 service.set_runtime_lecture(generated)
-                estimated_tokens = max(
-                    1,
-                    (
-                        len(generation_lecture.model_dump_json())
-                        + len(generated.model_dump_json())
-                    )
-                    // 4,
-                )
-                db.creators.log_usage(
-                    str(uuid.uuid4()),
-                    creator_id,
-                    lecture_id,
-                    "lecture_generation",
-                    estimated_tokens,
-                )
                 return generated
             except RuntimeError:
                 raise HTTPException(status_code=502, detail="Gemini generation failed") from None
@@ -168,7 +179,8 @@ def generate_interventions_for_lecture(
 
 
 @app.post("/api/sessions", response_model=SessionState, status_code=status.HTTP_201_CREATED)
-def create_session(req: CreateSessionRequest) -> SessionState:
+@limiter.limit("30/minute", key_func=get_real_client_ip)
+def create_session(request: Request, req: CreateSessionRequest) -> SessionState:
     """Create a new in-memory runtime session for a lecture.
 
     V0.2: Accepts optional client_id, external_user_id, and tier_override for
@@ -223,7 +235,10 @@ def sync_playback(session_id: str, req: SyncPlaybackRequest) -> SessionState:
 
 
 @app.post("/api/sessions/{session_id}/submit", response_model=EvaluationResult)
-def submit_answer(session_id: str, req: SubmitAnswerRequest) -> EvaluationResult:
+@limiter.limit("60/minute", key_func=get_real_client_ip)
+def submit_answer(
+    request: Request, session_id: str, req: SubmitAnswerRequest
+) -> EvaluationResult:
     """Submit answer for active intervention and receive deterministic evaluation result."""
     session_service = get_session_service()
     try:
@@ -252,7 +267,9 @@ def submit_experiment(session_id: str, req: InquiryExperimentSubmission) -> Eval
 
 
 @app.get("/api/studio/sessions")
+@limiter.limit("120/minute", key_func=get_creator_rate_limit_key)
 def list_creator_sessions(
+    request: Request,
     lecture_id: str | None = None,
     limit: int = 100,
     creator: dict[str, str] = Depends(require_creator),
@@ -264,7 +281,9 @@ def list_creator_sessions(
 
 
 @app.get("/api/learners/{client_id}/{user_id}", response_model=LearnerProfile)
+@limiter.limit("120/minute", key_func=get_creator_rate_limit_key)
 def get_learner_profile(
+    request: Request,
     client_id: str,
     user_id: str,
     creator: dict[str, str] = Depends(require_creator),
@@ -321,8 +340,12 @@ def skip_intervention(
     response_model=OpenEndedSubmissionResponse,
     status_code=status.HTTP_202_ACCEPTED,
 )
+@limiter.limit("60/minute", key_func=get_real_client_ip)
 def submit_open_ended(
-    session_id: str, req: OpenEndedSubmissionRequest, background_tasks: BackgroundTasks
+    request: Request,
+    session_id: str,
+    req: OpenEndedSubmissionRequest,
+    background_tasks: BackgroundTasks,
 ) -> OpenEndedSubmissionResponse:
     """Submit open-ended freeform answer for asynchronous AI evaluation."""
     session_service = get_session_service()
@@ -400,6 +423,7 @@ def submit_open_ended(
             user_id=session.external_user_id,
             concept=target_intv.concept,
             tier=tier,
+            lecture_id=session.lecture.id,
         ))
 
     background_tasks.add_task(evaluate_in_worker)
@@ -483,7 +507,9 @@ def self_assess_submission(
 
 
 @app.get("/api/telemetry")
+@limiter.limit("120/minute", key_func=get_creator_rate_limit_key)
 def export_telemetry(
+    request: Request,
     client_id: str | None = None,
     limit: int = 100,
     creator: dict[str, str] = Depends(require_creator),

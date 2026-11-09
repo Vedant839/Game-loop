@@ -4,6 +4,7 @@ import asyncio
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.database import get_database
 from backend.main import app
 from backend.schemas.lecture import (
     Difficulty,
@@ -18,10 +19,13 @@ from backend.schemas.lecture import (
     TimingConfig,
 )
 from backend.services.lecture_service import get_lecture_service
+from scripts.migrate import migrate_database
 
 
 @pytest.fixture
 def test_client():
+    db = get_database()
+    migrate_database(db.db_path)
     return TestClient(app)
 
 

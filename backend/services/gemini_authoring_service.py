@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any
+from typing import Any, Callable
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -329,6 +329,7 @@ def generate_interventions_with_gemini(
     target_count: int = 4,
     max_count: int = 6,
     models: list[str] | None = None,
+    usage_callback: Callable[[str], None] | None = None,
 ) -> Lecture:
     """Call Gemini to generate lecture-specific diverse interventions."""
     from google import genai
@@ -341,18 +342,21 @@ def generate_interventions_with_gemini(
     models_to_try = models or SUPPORTED_GEMINI_MODELS
 
     def _call(model_name: str) -> str | None:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=response_schema,
-            ),
-        )
-        text = getattr(response, "text", None)
-        if text:
-            return text
-        return None
+        text = ""
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=response_schema,
+                ),
+            )
+            text = getattr(response, "text", None) or ""
+            return text or None
+        finally:
+            if usage_callback is not None:
+                usage_callback(text)
 
     raw_text: str | None = None
     last_exc: Exception | None = None

@@ -22,10 +22,7 @@ def require_creator(authorization: str | None = Header(default=None)) -> dict[st
         raise HTTPException(status_code=401, detail="Invalid creator token")
 
     token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
-    try:
-        record = get_database().creators.get_token(token_hash)
-    except Exception:
-        record = None
+    record = get_database().creators.get_token(token_hash)
     if not record or record.get("revoked_at") is not None:
         raise HTTPException(status_code=401, detail="Invalid creator token")
     get_database().creators.touch_token(token_hash)
