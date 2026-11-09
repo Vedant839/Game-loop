@@ -261,6 +261,8 @@ class Database:
                         session_id TEXT NOT NULL,
                         intervention_id TEXT NOT NULL,
                         state TEXT NOT NULL,
+                        attempt_count INTEGER NOT NULL DEFAULT 0,
+                        hint_used INTEGER NOT NULL DEFAULT 0,
                         PRIMARY KEY (session_id, intervention_id),
                         FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
                     );
@@ -341,6 +343,8 @@ class Database:
         pending_submission: dict[str, Any] | None = None,
         intervention_ids: set[str] | None = None,
         completed_submission_keys: set[str] | None = None,
+        attempt_counts: dict[str, int] | None = None,
+        hint_used: dict[str, int] | None = None,
     ) -> None:
         """Persist or update complete runtime session. Writes are not retried."""
         with self._lock:
@@ -359,6 +363,8 @@ class Database:
                 pending_submission=pending_submission,
                 intervention_ids=intervention_ids,
                 completed_submission_keys=completed_submission_keys,
+                attempt_counts=attempt_counts,
+                hint_used=hint_used,
             )
 
     def load_session(self, session_id: str) -> dict[str, Any] | None:

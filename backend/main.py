@@ -20,6 +20,7 @@ from backend.schemas.session import (
     ActiveInterventionPayload,
     CreateSessionRequest,
     EvaluationResult,
+    HintRequest,
     InquiryExperimentSubmission,
     InterventionStateEnum,
     LearnerProfile,
@@ -135,6 +136,16 @@ def get_session_lecture(session_id: str) -> dict[str, Any]:
     except SessionError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
     return sanitize_student_lecture(session.lecture.model_dump(mode="json"))
+
+
+@app.post("/api/sessions/{session_id}/hint")
+def request_session_hint(session_id: str, req: HintRequest) -> dict[str, str]:
+    """Return a hint only when the server has recorded an attempt."""
+    try:
+        hint = get_session_service().request_hint(session_id, req.intervention_id)
+    except SessionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+    return {"hint": hint}
 
 
 @app.get("/api/studio/lectures/{lecture_id}", response_model=Lecture)
@@ -442,6 +453,7 @@ def submit_open_ended(
 
     # Transition state to EVALUATING
     session.interventions_state[intervention_id] = InterventionStateEnum.EVALUATING
+    session.attempt_counts[intervention_id] = session.attempt_counts.get(intervention_id, 0) + 1
     if resumption_policy == ResumptionPolicy.IMMEDIATE_OPTIMISTIC:
         # Optimistic resume: unlock video playhead
         session.active_intervention_id = None

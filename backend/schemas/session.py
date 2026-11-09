@@ -71,6 +71,10 @@ class SubmitAnswerRequest(BaseModel):
     expected_version: int | None = None
 
 
+class HintRequest(BaseModel):
+    intervention_id: str
+
+
 class SyncPlaybackRequest(BaseModel):
     playback_position: float
     expected_version: int | None = None

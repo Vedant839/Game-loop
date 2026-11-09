@@ -48,6 +48,8 @@ class RuntimeSession:
         self.interventions_state: dict[str, InterventionStateEnum] = {
             intv.id: InterventionStateEnum.PENDING for intv in lecture.interventions
         }
+        self.attempt_counts: dict[str, int] = {intv.id: 0 for intv in lecture.interventions}
+        self.hint_used: dict[str, int] = {intv.id: 0 for intv in lecture.interventions}
         self.completed_submissions: dict[str, EvaluationResult] = {}
 
     def get_state(self) -> SessionState:
@@ -104,6 +106,8 @@ class SessionService:
             pending_submission=pending_submission,
             intervention_ids=intervention_ids,
             completed_submission_keys=completed_submission_keys,
+            attempt_counts=session.attempt_counts,
+            hint_used=session.hint_used,
             learner_profile=(
                 {
                     "client_id": learner_profile.client_id,
@@ -143,6 +147,8 @@ class SessionService:
         session.interventions_state = {
             k: InterventionStateEnum(v) for k, v in data["interventions_state"].items()
         }
+        session.attempt_counts.update(data.get("attempt_counts", {}))
+        session.hint_used.update(data.get("hint_used", {}))
         for k, v in data["completed_submissions"].items():
             session.completed_submissions[k] = EvaluationResult.model_validate_json(v)
 
@@ -405,6 +411,7 @@ class SessionService:
         session.interventions_state[intervention_id] = InterventionStateEnum.COMPLETED
         session.active_intervention_id = None
         session.version += 1
+        session.attempt_counts[intervention_id] = session.attempt_counts.get(intervention_id, 0) + 1
 
         result = EvaluationResult(
             is_correct=is_correct,
@@ -475,6 +482,7 @@ class SessionService:
         session.interventions_state[intervention_id] = InterventionStateEnum.COMPLETED
         session.active_intervention_id = None
         session.version += 1
+        session.attempt_counts[intervention_id] = session.attempt_counts.get(intervention_id, 0) + 1
 
         result = EvaluationResult(
             is_correct=is_correct,
@@ -525,6 +533,9 @@ class SessionService:
             else getattr(intervention, "sandbox_config", None)
         )
         sandbox_config = sandbox_config_obj.model_dump() if sandbox_config_obj else None
+        if sandbox_config is not None:
+            sandbox_config.pop("hints", None)
+            sandbox_config.pop("solution_code", None)
 
         rubric_dict = None
         if getattr(intervention, "rubric", None):
@@ -547,6 +558,42 @@ class SessionService:
             resumption_policy=getattr(intervention, "resumption_policy", ResumptionPolicy.IMMEDIATE_OPTIMISTIC),
             rubric=rubric_dict,
         )
+
+    def request_hint(self, session_id: str, intervention_id: str) -> str:
+        """Return the available hint only after an answer attempt was recorded."""
+        session = self._get_or_load_session(session_id)
+        target = next(
+            (item for item in session.lecture.interventions if item.id == intervention_id),
+            None,
+        )
+        if target is None:
+            raise SessionError(f"Intervention '{intervention_id}' not found.", status_code=404)
+
+        attempt_count = session.attempt_counts.get(intervention_id, 0)
+        if attempt_count < 1:
+            raise SessionError(
+                "Must attempt the checkpoint before requesting a hint.", status_code=400
+            )
+
+        variant = target.variants.get(session.active_intervention_tier)
+        if variant and variant.hints:
+            hints = variant.hints
+        elif variant and variant.sandbox_config and variant.sandbox_config.hints:
+            hints = variant.sandbox_config.hints
+        elif target.hints:
+            hints = target.hints
+        elif target.sandbox_config and target.sandbox_config.hints:
+            hints = target.sandbox_config.hints
+        else:
+            hints = []
+
+        hint_index = 0 if attempt_count == 1 else 1
+        if len(hints) <= hint_index:
+            raise SessionError("No hint is available for this attempt.", status_code=404)
+
+        session.hint_used[intervention_id] = session.hint_used.get(intervention_id, 0) + 1
+        self._persist_session(session, intervention_ids={intervention_id})
+        return hints[hint_index]
 
     def record_evaluation_completed(self, session_id: str, intervention_id: str) -> None:
         """Mark intervention COMPLETED when async AI evaluation completes."""

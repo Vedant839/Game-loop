@@ -28,6 +28,8 @@ class SessionRepository(BaseRepository):
         pending_submission: dict[str, Any] | None = None,
         intervention_ids: set[str] | None = None,
         completed_submission_keys: set[str] | None = None,
+        attempt_counts: dict[str, int] | None = None,
+        hint_used: dict[str, int] | None = None,
     ) -> None:
         """Persist or update complete runtime session."""
         now = datetime.now(timezone.utc).isoformat()
@@ -51,10 +53,16 @@ class SessionRepository(BaseRepository):
             else ((key, value) for key, value in interventions_state.items() if key in intervention_ids)
         )
         statements.extend((
-            """INSERT INTO session_interventions (session_id, intervention_id, state)
-               VALUES (?, ?, ?) ON CONFLICT(session_id, intervention_id) DO UPDATE SET
-               state = excluded.state""",
-            (session_id, intervention_id, state),
+            """INSERT INTO session_interventions (
+                   session_id, intervention_id, state, attempt_count, hint_used
+               ) VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(session_id, intervention_id) DO UPDATE SET
+               state = excluded.state,
+               attempt_count = excluded.attempt_count,
+               hint_used = excluded.hint_used""",
+            (session_id, intervention_id, state,
+             (attempt_counts or {}).get(intervention_id, 0),
+             (hint_used or {}).get(intervention_id, 0)),
         ) for intervention_id, state in interventions_to_save)
         submissions_to_save = (
             completed_submissions.items()
@@ -106,7 +114,7 @@ class SessionRepository(BaseRepository):
                     "SELECT * FROM sessions WHERE session_id = ?", (session_id,)
                 ).fetchall()]
                 intervention_rows = [dict(row) for row in conn.execute(
-                    "SELECT intervention_id, state FROM session_interventions WHERE session_id = ?",
+                    "SELECT intervention_id, state, attempt_count, hint_used FROM session_interventions WHERE session_id = ?",
                     (session_id,),
                 ).fetchall()]
                 submission_rows = [dict(row) for row in conn.execute(
@@ -116,7 +124,7 @@ class SessionRepository(BaseRepository):
         else:
             statements = [
                 ("SELECT * FROM sessions WHERE session_id = ?", (session_id,)),
-                ("SELECT intervention_id, state FROM session_interventions WHERE session_id = ?", (session_id,)),
+                ("SELECT intervention_id, state, attempt_count, hint_used FROM session_interventions WHERE session_id = ?", (session_id,)),
                 ("SELECT idempotency_key, result_json FROM completed_submissions WHERE session_id = ?", (session_id,)),
             ]
             results = self.db.execute_batch(statements, transactional=False)
@@ -130,6 +138,8 @@ class SessionRepository(BaseRepository):
             return None
         row = session_rows[0]
         interventions_state = {r["intervention_id"]: r["state"] for r in intervention_rows}
+        attempt_counts = {r["intervention_id"]: r["attempt_count"] for r in intervention_rows}
+        hint_used = {r["intervention_id"]: r["hint_used"] for r in intervention_rows}
         completed_submissions = {
             r["idempotency_key"]: r["result_json"] for r in submission_rows
         }
@@ -143,6 +153,8 @@ class SessionRepository(BaseRepository):
             "active_intervention_id": row["active_intervention_id"],
             "active_intervention_tier": row["active_intervention_tier"],
             "interventions_state": interventions_state,
+            "attempt_counts": attempt_counts,
+            "hint_used": hint_used,
             "completed_submissions": completed_submissions,
         }
 

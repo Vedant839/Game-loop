@@ -75,6 +75,7 @@ class InterventionVariant(BaseModel):
     hypothesis_prompt: str | None = None
     hypothesis_options: list[Option] = Field(default_factory=list)
     sandbox_config: SandboxConfig | None = None
+    hints: list[str] = Field(default_factory=list)
     correct_answer: str | list[str] | None = None
     correct_feedback: str = Field(..., min_length=1)
     incorrect_feedback: str = Field(..., min_length=1)
@@ -89,6 +90,7 @@ class Intervention(BaseModel):
     type: InterventionType
     question: str = Field(..., min_length=1)
     options: list[Option] = Field(default_factory=list)
+    hints: list[str] = Field(default_factory=list)
     correct_answer: str | list[str] | None = None
     correct_feedback: str = Field(default="Great job!")
     incorrect_feedback: str = Field(default="Not quite right.")

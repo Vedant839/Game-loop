@@ -608,7 +608,7 @@ gcloud run deploy game-loop-api \
 ### P3 — Creator Studio & Distribution
 - [ ] **P3.1: Studio Frontend & APIs** — Implement Course & Lecture CRUD, `POST .../preview_session` (isolated from profiles/telemetry), Checkpoint Inspector with time-ordered repositioning, delete button, and skip-policy selector.
 - [ ] **P3.2: Standalone Watch & Embed Generator** — Implement `/watch/:id`, embed code generator with fullscreen and sandbox attributes, WCAG contrast checking.
-- [ ] **P3.3: Student-Facing Lecture Sanitization & Hint Gating** — Student and public lecture routes now strip answers, rubrics, hints, and recall pools; implement `POST /api/sessions/{id}/hint` with server-side attempt gating.
+- [ ] **P3.3: Student-Facing Lecture Sanitization & Hint Gating** — Student and public lecture routes strip private fields, and hints are delivered only after a recorded attempt; complete the full student-response scan and remediation retry flow.
 - **Exit Gate:** Studio requires creator token. Preview sessions excluded from analytics. Answers stripped from student endpoint.
 
 ### P4 — Analytics, Ops & Verification
@@ -704,7 +704,7 @@ Statuses reflect the current implementation and latest local evidence. `NOT VERI
 
 | Criterion | Test name / evidence | Status |
 |---:|---|---|
-| 1 | Host full suites: backend 72 passed; frontend 21 passed | PASS |
+| 1 | Host full suites: backend 73 passed; frontend 21 passed | PASS |
 | 2 | Frontend Vitest suite: 21 passed | PASS |
 | 3 | Static SQL audit: SQL is confined to `backend/database.py` and `backend/repositories/` | PASS |
 | 4 | `test_v03_migration_is_guarded_and_idempotent` | PASS |
@@ -724,7 +724,7 @@ Statuses reflect the current implementation and latest local evidence. `NOT VERI
 | 18 | No prompt-injection rubric-bounds test found | NOT IMPLEMENTED |
 | 19 | No score-correction monotonicity test found | NOT IMPLEMENTED |
 | 20 | `test_sanitizer_removes_nested_student_secrets_without_mutating_source`; public and session route sanitization tests | PASS |
-| 21 | No pre-attempt hint endpoint/test found | NOT IMPLEMENTED |
+| 21 | `test_hints_are_gated_by_persisted_attempt_count` verifies pre-attempt rejection and persisted hint selection | PASS |
 | 22 | No ingestion duration instrumentation/test found | NOT IMPLEMENTED |
 | 23 | No SRT/VTT parser or parser tests found | NOT IMPLEMENTED |
 | 24 | No generated checkpoint mobile fallback/recall pool test found | NOT IMPLEMENTED |
