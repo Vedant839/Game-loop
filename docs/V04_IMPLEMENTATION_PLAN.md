@@ -588,10 +588,10 @@ gcloud run deploy game-loop-api \
 - [x] **P0.3: Turso Driver Spike & Swap** — The `turso_serverless` DB-API spike verified remote access and concurrent writes. `GAME_LOOP_DATABASE_BACKEND=turso` selects the adapter; repository batches use DB-API `executemany`. Configure the Turso primary in the Cloud Run service region. Cloud Run same-region latency and remote rollback still require the Turso contract suite.
 - [x] **P0.4: Creator Auth & Quota Enforcement** — Implement `backend/auth.py`, `creator_tokens`, `scripts/create_token.py`, `scripts/revoke_token.py`. Implement monthly token cap check in `evaluator_service.py`. Gate V0.3 routes (`POST /api/lectures`, `GET /api/telemetry`, `GET /api/learners/{client_id}/{user_id}`).
 - [x] **P0.5: Anonymous Learner Identity** : Namespaced learner identity uses localStorage, falling back to sessionStorage and then an in-memory ID on storage exceptions. A visible notice explains progress is saved for the tab only.
-- **Exit Gate:** Current baseline passes (78 backend, 21 frontend), plus P0 repository contract and storage fallback tests. Reconfirm counts at the next sprint boundary.
+- **Exit Gate:** Current baseline passes (87 backend, 21 frontend), plus P0 repository contract and storage fallback tests. Reconfirm counts at the next sprint boundary.
 
 ### P1 — Ingestion & Video Adapters
-- [ ] **P1.1: IngestPage & Caption Parsers** — Implement `frontend/src/studio/IngestPage.tsx` (URL input, SRT/VTT file dropzone, browser-side audio upload with creator's key, intensity selector, progress bar) and `backend/utils/captions.py` (SRT/VTT parser).
+- [ ] **P1.1: IngestPage & Caption Parsers** — Caption parsing and transcript timing validation are implemented; implement `frontend/src/studio/IngestPage.tsx` (URL input, SRT/VTT file dropzone, browser-side audio upload with creator's key, intensity selector, progress bar).
 - [ ] **P1.2: Video Adapters** — Verify player adapters for YouTube, Vimeo, and direct MP4/HLS.
 - [ ] **P1.3: Checkpoint Generator** — Add `InterventionType.FLASH_RECALL`. Implement content-based placement heuristics, intensity overrides, mobile fallback pre-generation, and `recall_pool` generation. Remove hard intervention limit of 6.
 - [ ] **P1.4: Tab-Return Attention Trigger** — Implement `POST /api/sessions/{id}/tab_event` with 60s away check, 300s cooldown, sanitized recall question delivery, and recall pool fallback.
@@ -704,7 +704,7 @@ Statuses reflect the current implementation and latest local evidence. `NOT VERI
 
 | Criterion | Test name / evidence | Status |
 |---:|---|---|
-| 1 | Host full suites: backend 78 passed; frontend 21 passed | PASS |
+| 1 | Host full suites: backend 87 passed; frontend 21 passed | PASS |
 | 2 | Frontend Vitest suite: 21 passed | PASS |
 | 3 | Static SQL audit: SQL is confined to `backend/database.py` and `backend/repositories/` | PASS |
 | 4 | `test_v03_migration_is_guarded_and_idempotent` | PASS |
@@ -726,7 +726,7 @@ Statuses reflect the current implementation and latest local evidence. `NOT VERI
 | 20 | `test_sanitizer_removes_nested_student_secrets_without_mutating_source`; public and session route sanitization tests | PASS |
 | 21 | `test_hints_are_gated_by_persisted_attempt_count` verifies pre-attempt rejection and persisted hint selection | PASS |
 | 22 | No ingestion duration instrumentation/test found | NOT IMPLEMENTED |
-| 23 | No SRT/VTT parser or parser tests found | NOT IMPLEMENTED |
+| 23 | `tests/backend/test_captions.py` covers SRT/VTT parsing, timestamps, tags, empty/overlapping cues, malformed input, ordering, and gaps | PASS |
 | 24 | `test_flash_recall_revision_mobile_fallback_and_recall_pool_schema` validates the fields; generation remains pending | PARTIAL |
 | 25 | Creator lecture creation and Studio reads use the database; public/session reads still use lecture files | PARTIAL |
 | 26 | No checkpoint revision edit test found | NOT IMPLEMENTED |
