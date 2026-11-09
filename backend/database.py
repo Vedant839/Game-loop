@@ -339,6 +339,8 @@ class Database:
         completed_submissions: dict[str, str],
         learner_profile: dict[str, Any] | None = None,
         pending_submission: dict[str, Any] | None = None,
+        intervention_ids: set[str] | None = None,
+        completed_submission_keys: set[str] | None = None,
     ) -> None:
         """Persist or update complete runtime session. Writes are not retried."""
         with self._lock:
@@ -355,6 +357,8 @@ class Database:
                 completed_submissions=completed_submissions,
                 learner_profile=learner_profile,
                 pending_submission=pending_submission,
+                intervention_ids=intervention_ids,
+                completed_submission_keys=completed_submission_keys,
             )
 
     def load_session(self, session_id: str) -> dict[str, Any] | None:

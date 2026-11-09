@@ -83,6 +83,8 @@ class SessionService:
     def _persist_session(
         self, session: RuntimeSession, learner_profile: Any | None = None,
         pending_submission: dict[str, Any] | None = None,
+        intervention_ids: set[str] | None = None,
+        completed_submission_keys: set[str] | None = None,
     ) -> None:
         completed_json = {
             k: v.model_dump_json() for k, v in session.completed_submissions.items()
@@ -100,6 +102,8 @@ class SessionService:
             interventions_state=interventions_state,
             completed_submissions=completed_json,
             pending_submission=pending_submission,
+            intervention_ids=intervention_ids,
+            completed_submission_keys=completed_submission_keys,
             learner_profile=(
                 {
                     "client_id": learner_profile.client_id,
@@ -414,7 +418,12 @@ class SessionService:
 
         # Store for idempotency
         session.completed_submissions[idempotency_key] = result
-        self._persist_session(session, learner_profile=updated_profile)
+        self._persist_session(
+            session,
+            learner_profile=updated_profile,
+            intervention_ids={intervention_id},
+            completed_submission_keys={idempotency_key},
+        )
         return result
 
     def submit_experiment(
@@ -477,7 +486,12 @@ class SessionService:
             suggested_next_tier=next_tier,
         )
         session.completed_submissions[submission.idempotency_key] = result
-        self._persist_session(session, learner_profile=updated_profile)
+        self._persist_session(
+            session,
+            learner_profile=updated_profile,
+            intervention_ids={intervention_id},
+            completed_submission_keys={submission.idempotency_key},
+        )
         return result
 
     def _build_active_payload(

@@ -26,6 +26,8 @@ class SessionRepository(BaseRepository):
         completed_submissions: dict[str, str],
         learner_profile: dict[str, Any] | None = None,
         pending_submission: dict[str, Any] | None = None,
+        intervention_ids: set[str] | None = None,
+        completed_submission_keys: set[str] | None = None,
     ) -> None:
         """Persist or update complete runtime session."""
         now = datetime.now(timezone.utc).isoformat()
@@ -43,18 +45,28 @@ class SessionRepository(BaseRepository):
             (session_id, lecture_id, client_id, external_user_id, tier_override,
              version, active_intervention_id, active_intervention_tier, now, now),
         )]
+        interventions_to_save = (
+            interventions_state.items()
+            if intervention_ids is None
+            else ((key, value) for key, value in interventions_state.items() if key in intervention_ids)
+        )
         statements.extend((
             """INSERT INTO session_interventions (session_id, intervention_id, state)
                VALUES (?, ?, ?) ON CONFLICT(session_id, intervention_id) DO UPDATE SET
                state = excluded.state""",
             (session_id, intervention_id, state),
-        ) for intervention_id, state in interventions_state.items())
+        ) for intervention_id, state in interventions_to_save)
+        submissions_to_save = (
+            completed_submissions.items()
+            if completed_submission_keys is None
+            else ((key, value) for key, value in completed_submissions.items() if key in completed_submission_keys)
+        )
         statements.extend((
             """INSERT INTO completed_submissions (session_id, idempotency_key, result_json)
                VALUES (?, ?, ?) ON CONFLICT(session_id, idempotency_key) DO UPDATE SET
                result_json = excluded.result_json""",
             (session_id, key, value),
-        ) for key, value in completed_submissions.items())
+        ) for key, value in submissions_to_save)
         if pending_submission is not None:
             statements.append((
                 """INSERT INTO submissions (

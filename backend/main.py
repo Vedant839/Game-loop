@@ -398,6 +398,7 @@ def submit_open_ended(
     # Persist the session transition and pending submission in one atomic batch.
     session_service._persist_session(
         session,
+        intervention_ids={intervention_id},
         pending_submission={
             "submission_id": submission_id,
             "session_id": session_id,
