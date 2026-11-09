@@ -4,6 +4,7 @@ import sqlite3
 from pathlib import Path
 
 from scripts.migrate import migrate_database
+from scripts.backfill_lectures import backfill_lectures
 
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "v03_schema.sql"
@@ -51,3 +52,44 @@ def test_v03_migration_is_guarded_and_idempotent(tmp_path: Path) -> None:
         assert schema_after_second_run == schema_before_second_run
         assert conn.execute("SELECT COUNT(*) FROM sessions").fetchone() == (1,)
         assert conn.execute("SELECT COUNT(*) FROM session_interventions").fetchone() == (1,)
+
+
+def test_lecture_json_backfill_is_idempotent_and_uses_default_creator(tmp_path: Path) -> None:
+    db_path = tmp_path / "backfill_fixture.db"
+    lectures_dir = tmp_path / "lectures"
+    lectures_dir.mkdir()
+    lecture_path = lectures_dir / "sample.json"
+    lecture_json = (
+        '{"id":"sample","title":"Sample Lecture",'
+        '"subject":"Math","grade":"11","duration_seconds":60,'
+        '"video_url":"https://youtu.be/example","interventions":[]}'
+    )
+    lecture_path.write_text(lecture_json, encoding="utf-8")
+
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(FIXTURE.read_text(encoding="utf-8"))
+    assert migrate_database(db_path) is True
+
+    with sqlite3.connect(db_path) as conn:
+        assert backfill_lectures(conn, lectures_dir) == 1
+        first = conn.execute(
+            "SELECT lecture_id, creator_id, title, source_type, content, created_at, updated_at "
+            "FROM lectures WHERE lecture_id = 'sample'"
+        ).fetchone()
+        assert first[:5] == (
+            "sample", "default_client", "Sample Lecture", "youtube", lecture_json
+        )
+
+        assert backfill_lectures(conn, lectures_dir) == 0
+        second = conn.execute(
+            "SELECT lecture_id, creator_id, title, source_type, content, created_at, updated_at "
+            "FROM lectures WHERE lecture_id = 'sample'"
+        ).fetchone()
+        assert second == first
+
+        lecture_path.write_text(lecture_json.replace("Sample Lecture", "Updated Lecture"), encoding="utf-8")
+        assert backfill_lectures(conn, lectures_dir) == 1
+        updated = conn.execute(
+            "SELECT title, creator_id FROM lectures WHERE lecture_id = 'sample'"
+        ).fetchone()
+        assert updated == ("Updated Lecture", "default_client")

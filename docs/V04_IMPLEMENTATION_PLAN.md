@@ -583,12 +583,12 @@ gcloud run deploy game-loop-api \
 ## 11. Implementation Sprints
 
 ### P0 — Safe Foundations & Persistence
-- [ ] **P0.1: Repository Layer** — Create `backend/repositories/` (`base.py`, `session_repository.py`, `lecture_repository.py`, `submission_repository.py`, `telemetry_repository.py`, `creator_repository.py`). Route all SQL queries through repositories.
-- [ ] **P0.2: Migration Runner & Backfill** — Implement `scripts/migrate.py` and `scripts/backfill_lectures.py`. Execute migrations against V0.3 schema, seed `creator_id`, backfill `lecture_id`, and verify idempotency.
+- [x] **P0.1: Repository Layer** — Create `backend/repositories/` (`base.py`, `session_repository.py`, `lecture_repository.py`, `submission_repository.py`, `telemetry_repository.py`, `creator_repository.py`). Route all SQL queries through repositories.
+- [x] **P0.2: Migration Runner & Backfill** — `scripts/migrate.py` applies the guarded V0.3 migration and backfills session `creator_id`/intervention `lecture_id`; `scripts/backfill_lectures.py` imports local lecture JSON into `lectures` with `creator_id='default_client'`. Both paths have idempotency coverage against temporary SQLite databases.
 - [x] **P0.3: Turso Driver Spike & Swap** — The `turso_serverless` DB-API spike verified remote access and concurrent writes. `GAME_LOOP_DATABASE_BACKEND=turso` selects the adapter; repository batches use DB-API `executemany`. Configure the Turso primary in the Cloud Run service region. Cloud Run same-region latency and remote rollback still require the Turso contract suite.
-- [ ] **P0.4: Creator Auth & Quota Enforcement** — Implement `backend/auth.py`, `creator_tokens`, `scripts/create_token.py`, `scripts/revoke_token.py`. Implement monthly token cap check in `evaluator_service.py`. Gate V0.3 routes (`POST /api/lectures`, `GET /api/telemetry`, `GET /api/learners/{client_id}/{user_id}`).
+- [x] **P0.4: Creator Auth & Quota Enforcement** — Implement `backend/auth.py`, `creator_tokens`, `scripts/create_token.py`, `scripts/revoke_token.py`. Implement monthly token cap check in `evaluator_service.py`. Gate V0.3 routes (`POST /api/lectures`, `GET /api/telemetry`, `GET /api/learners/{client_id}/{user_id}`).
 - [x] **P0.5: Anonymous Learner Identity** : Namespaced learner identity uses localStorage, falling back to sessionStorage and then an in-memory ID on storage exceptions. A visible notice explains progress is saved for the tab only.
-- **Exit Gate:** The 48 backend / 20 frontend baseline passes, plus P0 repository contract and storage fallback tests.
+- **Exit Gate:** Current baseline passes (67 backend, 21 frontend), plus P0 repository contract and storage fallback tests. Reconfirm counts at the next sprint boundary.
 
 ### P1 — Ingestion & Video Adapters
 - [ ] **P1.1: IngestPage & Caption Parsers** — Implement `frontend/src/studio/IngestPage.tsx` (URL input, SRT/VTT file dropzone, browser-side audio upload with creator's key, intensity selector, progress bar) and `backend/utils/captions.py` (SRT/VTT parser).
@@ -628,13 +628,13 @@ gcloud run deploy game-loop-api \
 ### Baseline & Persistence
 | # | Criterion | Spec Ref |
 |---|---|---|
-| 1 | The current baseline (48 backend and 20 frontend tests) passes at every sprint boundary; added P0 contract and storage tests pass alongside it. | Baseline |
-| 2 | All 20 baseline frontend Vitest tests pass at every sprint boundary. | Baseline |
+| 1 | The current backend and frontend test suites pass at every sprint boundary; added P0 contract and storage tests pass alongside them. | Baseline |
+| 2 | All frontend Vitest tests pass at every sprint boundary. | Baseline |
 | 3 | No SQL outside `backend/repositories/` or `backend/database.py` | §2.1, P0.1 |
 | 4 | Migration runner `scripts/migrate.py` is idempotent and runs outside app boot | §10.1 |
 | 5 | `scripts/backfill_lectures.py` successfully imports existing lecture JSON files into `lectures` table and sets `creator_id` | §10.2 |
 | 6 | Repository contract tests pass against SQLite and Turso for migration, session lifecycle, submissions, learner profiles, deletion rollback, and concurrent writes. Turso uses a scratch database selected by `GAME_LOOP_TEST_DATABASE=turso`; the rest of the suite stays on SQLite. | Spec 10.2 / P0.3 |
-| 7 | Concurrent write test (5 simultaneous writes) passes without state corruption **(verified: 5/5 spike writes landed)** | P0.3 |
+| 7 | Concurrent write test passes without state corruption. SQLite test evidence exists; the historic 5/5 Turso spike is not current contract-suite evidence. | P0.3 |
 
 ### Security, Auth & Quotas
 | # | Criterion | Spec Ref |
@@ -697,6 +697,66 @@ gcloud run deploy game-loop-api \
 | 51 | The V0.3 engine streak characterization passes with correct, correct, correct, wrong, wrong | section 5.3 |
 | 52 | No session response contains answer or rubric fields | section 4.2 |
 | 53 | The first creator token can list the Linux lecture and its existing sessions | section 3.1 |
+
+### Acceptance Evidence (2026-11-09)
+
+Statuses reflect the current implementation and latest local evidence. `NOT VERIFIED` means the required live/deployed environment was intentionally not exercised; `NOT IMPLEMENTED` means the criterion is still outstanding.
+
+| Criterion | Test name / evidence | Status |
+|---:|---|---|
+| 1 | Host full suites: backend 67 passed; frontend 21 passed | PASS |
+| 2 | Frontend Vitest suite: 21 passed | PASS |
+| 3 | Static SQL audit: SQL is confined to `backend/database.py` and `backend/repositories/` | PASS |
+| 4 | `test_v03_migration_is_guarded_and_idempotent` | PASS |
+| 5 | `test_lecture_json_backfill_is_idempotent_and_uses_default_creator` | PASS |
+| 6 | `test_repository_contract_migration_lifecycle_submission_profile_and_delete_rollback`; SQLite only, Turso contract run not performed | PARTIAL |
+| 7 | `test_repository_contract_concurrent_writes` on SQLite; Turso spike result is historical | PARTIAL |
+| 8 | `test_creator_routes_reject_missing_token` | PASS |
+| 9 | `test_creator_routes_reject_missing_token` covers gated legacy routes | PASS |
+| 10 | `test_v03_lecture_detail_route_response_shape` checks response shape, not answer sanitization | PARTIAL |
+| 11 | `test_creator_cannot_read_another_creators_telemetry_or_profile`; lecture isolation not covered | PARTIAL |
+| 12 | `test_revoked_creator_token_is_rejected` | PASS |
+| 13 | Static route scan found no `uid` query parameter | PASS |
+| 14 | No fake-session-id isolation test found | NOT IMPLEMENTED |
+| 15 | `test_session_creation_is_limited_by_rightmost_forwarded_ip` | PASS |
+| 16 | `test_monthly_token_cap_blocks_gemini_call`; `test_evaluator_over_cap_skips_gemini_and_uses_fallback` | PASS |
+| 17 | `test_simulated_gemini_failure_redacts_key_from_logs_and_response` | PASS |
+| 18 | No prompt-injection rubric-bounds test found | NOT IMPLEMENTED |
+| 19 | No score-correction monotonicity test found | NOT IMPLEMENTED |
+| 20 | No student lecture answer-stripping test found | NOT IMPLEMENTED |
+| 21 | No pre-attempt hint endpoint/test found | NOT IMPLEMENTED |
+| 22 | No ingestion duration instrumentation/test found | NOT IMPLEMENTED |
+| 23 | No SRT/VTT parser or parser tests found | NOT IMPLEMENTED |
+| 24 | No generated checkpoint mobile fallback/recall pool test found | NOT IMPLEMENTED |
+| 25 | Lecture database persistence/read path is not implemented | NOT IMPLEMENTED |
+| 26 | No checkpoint revision edit test found | NOT IMPLEMENTED |
+| 27 | Server-side flash recall without Gemini is not implemented | NOT IMPLEMENTED |
+| 28 | Flash recall Format B handling is not implemented | NOT IMPLEMENTED |
+| 29 | Explicit-tap, single-attempt flash recall is not implemented | NOT IMPLEMENTED |
+| 30 | Retry hint sequencing is not implemented | NOT IMPLEMENTED |
+| 31 | Third-attempt reveal/reflection enforcement is not implemented | NOT IMPLEMENTED |
+| 32 | `REQUIRED_WITH_RETRY` correction flow is not implemented | NOT IMPLEMENTED |
+| 33 | Static scan found no Smart Replay strings in `frontend/src` | PASS |
+| 34 | `test_v03_engine_streak_characterization` | PASS |
+| 35 | No immediate Mastery Ring update test found | NOT IMPLEMENTED |
+| 36 | Tab-return recall behavior is not implemented | NOT IMPLEMENTED |
+| 37 | Duplicate tab-return suppression is not implemented | NOT IMPLEMENTED |
+| 38 | Mobile sandbox fallback is not implemented | NOT IMPLEMENTED |
+| 39 | Sanitized study guide rendering is not implemented | NOT IMPLEMENTED |
+| 40 | Mid-lecture study guide filtering is not implemented | NOT IMPLEMENTED |
+| 41 | Preview-session analytics isolation is not implemented | NOT IMPLEMENTED |
+| 42 | Confusion Radar denominator/flash-recall behavior is not implemented | NOT IMPLEMENTED |
+| 43 | CSV/JSON export and formula-injection handling are not implemented | NOT IMPLEMENTED |
+| 44 | Embed code generator is not implemented | NOT IMPLEMENTED |
+| 45 | Accent-color contrast fallback is not implemented | NOT IMPLEMENTED |
+| 46 | Repository deletion rollback is covered by `test_repository_contract_migration_lifecycle_submission_profile_and_delete_rollback`; API cascade endpoint is absent | PARTIAL |
+| 47 | 90-day event retention script is not implemented | NOT IMPLEMENTED |
+| 48 | Docker image build and `test_health_endpoint_reports_backend_ready` pass locally; deployed Cloud Run health was not checked | PARTIAL |
+| 49 | `test_v03_migration_is_guarded_and_idempotent` | PASS |
+| 50 | `test_media_route_is_404_in_production` | PASS |
+| 51 | `test_v03_engine_streak_characterization` | PASS |
+| 52 | Student response sanitization is not implemented | NOT IMPLEMENTED |
+| 53 | `test_first_creator_can_list_linux_lecture_and_its_sessions` | PASS |
 
 ---
 
