@@ -13,26 +13,13 @@ _PRIVATE_FIELDS = {
     "solution_code",
     "recall_pool",
 }
-_PRIVATE_RUBRIC_FIELDS = {
-    "key_concepts",
-    "reference_answer",
-    "misconceptions",
-    "passing_score",
-}
-
-
 def sanitize_student_lecture(lecture: dict[str, Any]) -> dict[str, Any]:
     """Return a copy without answer keys, solution hints, rubrics, or recall pools."""
     sanitized = deepcopy(lecture)
 
     def strip_private_fields(value: Any) -> None:
         if isinstance(value, dict):
-            rubric = value.get("rubric")
-            if isinstance(rubric, dict):
-                for field in _PRIVATE_RUBRIC_FIELDS:
-                    rubric.pop(field, None)
-                if not rubric:
-                    value.pop("rubric", None)
+            value.pop("rubric", None)
             for field in _PRIVATE_FIELDS:
                 value.pop(field, None)
             for child in list(value.values()):

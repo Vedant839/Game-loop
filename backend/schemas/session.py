@@ -105,10 +105,9 @@ class ActiveInterventionPayload(BaseModel):
     hypothesis_prompt: str | None = None
     hypothesis_options: list[dict[str, str]] = Field(default_factory=list)
     sandbox_config: dict[str, Any] | None = None
-    # V0.3 policy and rubric fields
+    # V0.3 policy fields; evaluation rubrics are server-only.
     policy: InterventionPolicy = InterventionPolicy.SKIPPABLE
     resumption_policy: ResumptionPolicy = ResumptionPolicy.IMMEDIATE_OPTIMISTIC
-    rubric: dict[str, Any] | None = None
 
 
 
@@ -175,7 +174,6 @@ class SubmissionStatusResponse(BaseModel):
     misconceptions_detected: list[str] = Field(default_factory=list)
     self_assessed: bool = False
     evaluation_latency_ms: int | None = None
-    reference_rubric: dict[str, Any] | None = None
 
 
 class SelfAssessRequest(BaseModel):

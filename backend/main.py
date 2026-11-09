@@ -521,18 +521,7 @@ def get_submission_status(session_id: str, submission_id: str) -> SubmissionStat
     now_dt = datetime.now(timezone.utc)
     elapsed = (now_dt - created_dt).total_seconds()
 
-    reference_rubric = None
     session_service = get_session_service()
-    try:
-        session = session_service._get_or_load_session(session_id)
-        target_intv = next(
-            (i for i in session.lecture.interventions if i.id == sub["intervention_id"]), None
-        )
-        if target_intv and getattr(target_intv, "rubric", None):
-            reference_rubric = target_intv.rubric.model_dump()
-    except Exception:
-        pass
-
     if status_val == SubmissionStatus.PENDING and elapsed > 5.0:
         status_val = SubmissionStatus.TIMED_OUT
 
@@ -545,7 +534,6 @@ def get_submission_status(session_id: str, submission_id: str) -> SubmissionStat
         misconceptions_detected=sub["misconceptions"],
         self_assessed=sub["self_assessed"],
         evaluation_latency_ms=sub["latency_ms"],
-        reference_rubric=reference_rubric,
     )
 
 

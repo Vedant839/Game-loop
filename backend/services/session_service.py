@@ -537,10 +537,6 @@ class SessionService:
             sandbox_config.pop("hints", None)
             sandbox_config.pop("solution_code", None)
 
-        rubric_dict = None
-        if getattr(intervention, "rubric", None):
-            rubric_dict = intervention.rubric.model_dump()
-
         return ActiveInterventionPayload(
             id=intervention.id,
             trigger_time=intervention.trigger_time,
@@ -556,7 +552,6 @@ class SessionService:
             sandbox_config=sandbox_config,
             policy=getattr(intervention, "policy", InterventionPolicy.SKIPPABLE),
             resumption_policy=getattr(intervention, "resumption_policy", ResumptionPolicy.IMMEDIATE_OPTIMISTIC),
-            rubric=rubric_dict,
         )
 
     def request_hint(self, session_id: str, intervention_id: str) -> str:

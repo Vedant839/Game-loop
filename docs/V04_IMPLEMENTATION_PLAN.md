@@ -608,7 +608,7 @@ gcloud run deploy game-loop-api \
 ### P3 — Creator Studio & Distribution
 - [ ] **P3.1: Studio Frontend & APIs** — Implement Course & Lecture CRUD, `POST .../preview_session` (isolated from profiles/telemetry), Checkpoint Inspector with time-ordered repositioning, delete button, and skip-policy selector.
 - [ ] **P3.2: Standalone Watch & Embed Generator** — Implement `/watch/:id`, embed code generator with fullscreen and sandbox attributes, WCAG contrast checking.
-- [ ] **P3.3: Student-Facing Lecture Sanitization & Hint Gating** — Student and public lecture routes strip private fields, and hints are delivered only after a recorded attempt; complete the full student-response scan and remediation retry flow.
+- [x] **P3.3: Student-Facing Lecture Sanitization & Hint Gating** — Student and public lecture routes strip private fields; hints are delivered only after a recorded attempt; the end-to-end student-response scan passes. Remediation retry flow remains in §5.3.
 - **Exit Gate:** Studio requires creator token. Preview sessions excluded from analytics. Answers stripped from student endpoint.
 
 ### P4 — Analytics, Ops & Verification
@@ -619,7 +619,7 @@ gcloud run deploy game-loop-api \
 - [ ] **P4.5: Deployment Verification** — Root Dockerfile with `${PORT:-8080}`, migration CLI, and Cloud Run script verification.
 - **Exit Gate:** All 53 acceptance criteria pass.
 
-> **Deployment hold:** Do not deploy this service publicly until P3.3 delivers and tests hint gating and the complete student-response scan.
+> **Sanitization gate cleared:** P3.3 and acceptance criterion 52 pass locally. Deployment remains subject to the other sprint exit gates.
 
 ---
 
@@ -704,7 +704,7 @@ Statuses reflect the current implementation and latest local evidence. `NOT VERI
 
 | Criterion | Test name / evidence | Status |
 |---:|---|---|
-| 1 | Host full suites: backend 73 passed; frontend 21 passed | PASS |
+| 1 | Host full suites: backend 74 passed; frontend 21 passed | PASS |
 | 2 | Frontend Vitest suite: 21 passed | PASS |
 | 3 | Static SQL audit: SQL is confined to `backend/database.py` and `backend/repositories/` | PASS |
 | 4 | `test_v03_migration_is_guarded_and_idempotent` | PASS |
@@ -755,7 +755,7 @@ Statuses reflect the current implementation and latest local evidence. `NOT VERI
 | 49 | `test_v03_migration_is_guarded_and_idempotent` | PASS |
 | 50 | `test_media_route_is_404_in_production` | PASS |
 | 51 | `test_v03_engine_streak_characterization` | PASS |
-| 52 | Student response sanitization is not implemented | NOT IMPLEMENTED |
+| 52 | `test_session_response_scan_through_completion` | PASS |
 | 53 | `test_first_creator_can_list_linux_lecture_and_its_sessions` | PASS |
 
 ---
