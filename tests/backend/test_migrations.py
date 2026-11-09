@@ -1,6 +1,7 @@
 ﻿"""Migration regression against the committed, data-free V0.3 schema fixture."""
 
 import sqlite3
+import json
 from pathlib import Path
 
 from scripts.migrate import migrate_database
@@ -8,6 +9,7 @@ from scripts.backfill_lectures import backfill_lectures
 
 
 FIXTURE = Path(__file__).parents[1] / "fixtures" / "v03_schema.sql"
+V04_COLUMNS_FIXTURE = Path(__file__).parents[1] / "fixtures" / "v04_migration_columns.json"
 
 
 def test_v03_migration_is_guarded_and_idempotent(tmp_path: Path) -> None:
@@ -36,8 +38,10 @@ def test_v03_migration_is_guarded_and_idempotent(tmp_path: Path) -> None:
             "SELECT lecture_id, state FROM session_interventions WHERE session_id = 's1'"
         ).fetchone()
         assert intervention == ("linux_lecture", "BYPASSED")
-        columns = {row[1] for row in conn.execute("PRAGMA table_info(session_interventions)")}
-        assert {"revision", "attempt_count", "hint_used", "first_try_correct"} <= columns
+        expected_columns = json.loads(V04_COLUMNS_FIXTURE.read_text(encoding="utf-8"))
+        for table, expected in expected_columns.items():
+            columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+            assert set(expected) <= columns
         tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert {"creator_tokens", "usage_log", "courses", "lectures", "course_lectures", "study_guides", "tab_events"} <= tables
         schema_before_second_run = conn.execute(

@@ -173,7 +173,9 @@ class EvaluatorService:
         from backend.services.session_service import get_session_service
 
         session_service = get_session_service(db=self.db)
-        session_service.record_evaluation_completed(session_id, intervention_id)
+        session_service.record_evaluation_completed(
+            session_id, intervention_id, is_correct=eval_result.is_correct
+        )
 
 
         return eval_result
@@ -314,7 +316,9 @@ class EvaluatorService:
         from backend.services.session_service import get_session_service
 
         session_service = get_session_service(db=self.db)
-        updated_state = session_service.record_self_assessment(session_id, sub["intervention_id"])
+        updated_state = session_service.record_self_assessment(
+            session_id, sub["intervention_id"], is_correct=self_assessed_correct
+        )
         return updated_state.model_dump()
 
 

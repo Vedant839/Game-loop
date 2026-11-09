@@ -1,7 +1,7 @@
 """Lecture, Transcript, and Intervention Pydantic schemas and deterministic validation rules."""
 
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -18,6 +18,7 @@ class InterventionType(str, Enum):
     PREDICT_AND_VERIFY = "predict_and_verify"
     INQUIRY_SANDBOX = "inquiry_sandbox"
     OPEN_ENDED = "open_ended"
+    FLASH_RECALL = "flash_recall"
 
 
 class InterventionPolicy(str, Enum):
@@ -84,6 +85,7 @@ class InterventionVariant(BaseModel):
 
 class Intervention(BaseModel):
     id: str = Field(..., min_length=1)
+    revision: int = Field(default=1, ge=1)
     trigger_time: float = Field(..., ge=0.0)
     concept: str = Field(..., min_length=1)
     difficulty: Difficulty
@@ -96,6 +98,7 @@ class Intervention(BaseModel):
     incorrect_feedback: str = Field(default="Not quite right.")
     # V0.2 Inquiry & Sandbox Extensions
     sandbox_config: SandboxConfig | None = None
+    mobile_fallback: dict[str, Any] | None = None
     hypothesis_prompt: str | None = None
     hypothesis_options: list[Option] = Field(default_factory=list)
     variants: dict[int, InterventionVariant] = Field(default_factory=dict)
@@ -184,6 +187,7 @@ class Lecture(BaseModel):
     timing_config: TimingConfig = Field(default_factory=TimingConfig)
     transcript: list[TranscriptSegment] = Field(default_factory=list)
     interventions: list[Intervention] = Field(default_factory=list)
+    recall_pool: list[dict[str, Any]] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_lecture_constraints(self) -> "Lecture":
@@ -193,12 +197,6 @@ class Lecture(BaseModel):
                 raise ValueError(
                     f"Transcript segment {i} end_time ({seg.end_time}) exceeds lecture duration ({self.duration_seconds})."
                 )
-
-        # Check maximum interventions count (SPEC Section 27)
-        if len(self.interventions) > 6:
-            raise ValueError(
-                f"Lecture contains {len(self.interventions)} interventions, exceeding maximum allowed of 6."
-            )
 
         # Check intervention timestamps and trigger spacing
         prev_trigger_time: float | None = None

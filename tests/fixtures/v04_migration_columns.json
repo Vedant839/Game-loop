@@ -1,0 +1,13 @@
+{
+  "sessions": ["creator_id", "learner_id", "is_preview"],
+  "session_interventions": [
+    "lecture_id",
+    "revision",
+    "attempt_count",
+    "hint_used",
+    "first_try_correct"
+  ],
+  "submissions": ["reflect_text", "flag_for_review", "client_reported"],
+  "telemetry_events": ["lecture_id"],
+  "lectures": ["creator_id", "content", "updated_at"]
+}

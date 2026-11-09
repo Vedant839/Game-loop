@@ -588,7 +588,7 @@ gcloud run deploy game-loop-api \
 - [x] **P0.3: Turso Driver Spike & Swap** — The `turso_serverless` DB-API spike verified remote access and concurrent writes. `GAME_LOOP_DATABASE_BACKEND=turso` selects the adapter; repository batches use DB-API `executemany`. Configure the Turso primary in the Cloud Run service region. Cloud Run same-region latency and remote rollback still require the Turso contract suite.
 - [x] **P0.4: Creator Auth & Quota Enforcement** — Implement `backend/auth.py`, `creator_tokens`, `scripts/create_token.py`, `scripts/revoke_token.py`. Implement monthly token cap check in `evaluator_service.py`. Gate V0.3 routes (`POST /api/lectures`, `GET /api/telemetry`, `GET /api/learners/{client_id}/{user_id}`).
 - [x] **P0.5: Anonymous Learner Identity** : Namespaced learner identity uses localStorage, falling back to sessionStorage and then an in-memory ID on storage exceptions. A visible notice explains progress is saved for the tab only.
-- **Exit Gate:** Current baseline passes (72 backend, 21 frontend), plus P0 repository contract and storage fallback tests. Reconfirm counts at the next sprint boundary.
+- **Exit Gate:** Current baseline passes (76 backend, 21 frontend), plus P0 repository contract and storage fallback tests. Reconfirm counts at the next sprint boundary.
 
 ### P1 — Ingestion & Video Adapters
 - [ ] **P1.1: IngestPage & Caption Parsers** — Implement `frontend/src/studio/IngestPage.tsx` (URL input, SRT/VTT file dropzone, browser-side audio upload with creator's key, intensity selector, progress bar) and `backend/utils/captions.py` (SRT/VTT parser).
@@ -704,7 +704,7 @@ Statuses reflect the current implementation and latest local evidence. `NOT VERI
 
 | Criterion | Test name / evidence | Status |
 |---:|---|---|
-| 1 | Host full suites: backend 74 passed; frontend 21 passed | PASS |
+| 1 | Host full suites: backend 76 passed; frontend 21 passed | PASS |
 | 2 | Frontend Vitest suite: 21 passed | PASS |
 | 3 | Static SQL audit: SQL is confined to `backend/database.py` and `backend/repositories/` | PASS |
 | 4 | `test_v03_migration_is_guarded_and_idempotent` | PASS |
@@ -727,7 +727,7 @@ Statuses reflect the current implementation and latest local evidence. `NOT VERI
 | 21 | `test_hints_are_gated_by_persisted_attempt_count` verifies pre-attempt rejection and persisted hint selection | PASS |
 | 22 | No ingestion duration instrumentation/test found | NOT IMPLEMENTED |
 | 23 | No SRT/VTT parser or parser tests found | NOT IMPLEMENTED |
-| 24 | No generated checkpoint mobile fallback/recall pool test found | NOT IMPLEMENTED |
+| 24 | `test_flash_recall_revision_mobile_fallback_and_recall_pool_schema` validates the fields; generation remains pending | PARTIAL |
 | 25 | Creator lecture creation and Studio reads use the database; public/session reads still use lecture files | PARTIAL |
 | 26 | No checkpoint revision edit test found | NOT IMPLEMENTED |
 | 27 | Server-side flash recall without Gemini is not implemented | NOT IMPLEMENTED |
@@ -752,7 +752,7 @@ Statuses reflect the current implementation and latest local evidence. `NOT VERI
 | 46 | Repository deletion rollback is covered by `test_repository_contract_migration_lifecycle_submission_profile_and_delete_rollback`; API cascade endpoint is absent | PARTIAL |
 | 47 | 90-day event retention script is not implemented | NOT IMPLEMENTED |
 | 48 | Docker image build and `test_health_endpoint_reports_backend_ready` pass locally; deployed Cloud Run health was not checked | PARTIAL |
-| 49 | `test_v03_migration_is_guarded_and_idempotent` | PASS |
+| 49 | `test_v03_migration_is_guarded_and_idempotent` compares migrated columns with `v04_migration_columns.json` and confirms the second run is unchanged | PASS |
 | 50 | `test_media_route_is_404_in_production` | PASS |
 | 51 | `test_v03_engine_streak_characterization` | PASS |
 | 52 | `test_session_response_scan_through_completion` | PASS |

@@ -50,6 +50,12 @@ class RuntimeSession:
         }
         self.attempt_counts: dict[str, int] = {intv.id: 0 for intv in lecture.interventions}
         self.hint_used: dict[str, int] = {intv.id: 0 for intv in lecture.interventions}
+        self.revisions: dict[str, int] = {
+            intv.id: getattr(intv, "revision", 1) for intv in lecture.interventions
+        }
+        self.first_try_correct: dict[str, bool | None] = {
+            intv.id: None for intv in lecture.interventions
+        }
         self.completed_submissions: dict[str, EvaluationResult] = {}
 
     def get_state(self) -> SessionState:
@@ -108,6 +114,8 @@ class SessionService:
             completed_submission_keys=completed_submission_keys,
             attempt_counts=session.attempt_counts,
             hint_used=session.hint_used,
+            revisions=session.revisions,
+            first_try_correct=session.first_try_correct,
             learner_profile=(
                 {
                     "client_id": learner_profile.client_id,
@@ -149,6 +157,8 @@ class SessionService:
         }
         session.attempt_counts.update(data.get("attempt_counts", {}))
         session.hint_used.update(data.get("hint_used", {}))
+        session.revisions.update(data.get("revisions", {}))
+        session.first_try_correct.update(data.get("first_try_correct", {}))
         for k, v in data["completed_submissions"].items():
             session.completed_submissions[k] = EvaluationResult.model_validate_json(v)
 
@@ -411,6 +421,8 @@ class SessionService:
         session.interventions_state[intervention_id] = InterventionStateEnum.COMPLETED
         session.active_intervention_id = None
         session.version += 1
+        if session.first_try_correct.get(intervention_id) is None:
+            session.first_try_correct[intervention_id] = is_correct
         session.attempt_counts[intervention_id] = session.attempt_counts.get(intervention_id, 0) + 1
 
         result = EvaluationResult(
@@ -482,6 +494,8 @@ class SessionService:
         session.interventions_state[intervention_id] = InterventionStateEnum.COMPLETED
         session.active_intervention_id = None
         session.version += 1
+        if session.first_try_correct.get(intervention_id) is None:
+            session.first_try_correct[intervention_id] = is_correct
         session.attempt_counts[intervention_id] = session.attempt_counts.get(intervention_id, 0) + 1
 
         result = EvaluationResult(
@@ -590,19 +604,34 @@ class SessionService:
         self._persist_session(session, intervention_ids={intervention_id})
         return hints[hint_index]
 
-    def record_evaluation_completed(self, session_id: str, intervention_id: str) -> None:
+    def record_evaluation_completed(
+        self, session_id: str, intervention_id: str, is_correct: bool | None = None
+    ) -> None:
         """Mark intervention COMPLETED when async AI evaluation completes."""
         session = self._get_or_load_session(session_id)
+        changed = False
+        if (
+            is_correct is not None
+            and session.first_try_correct.get(intervention_id) is None
+        ):
+            session.first_try_correct[intervention_id] = is_correct
+            changed = True
         if session.interventions_state.get(intervention_id) == InterventionStateEnum.EVALUATING:
             session.interventions_state[intervention_id] = InterventionStateEnum.COMPLETED
             if session.active_intervention_id == intervention_id:
                 session.active_intervention_id = None
             session.version += 1
-            self._persist_session(session)
+            changed = True
+        if changed:
+            self._persist_session(session, intervention_ids={intervention_id})
 
-    def record_self_assessment(self, session_id: str, intervention_id: str) -> SessionState:
+    def record_self_assessment(
+        self, session_id: str, intervention_id: str, is_correct: bool | None = None
+    ) -> SessionState:
         """Transition intervention to COMPLETED after learner self-assesses timed-out rubric."""
         session = self._get_or_load_session(session_id)
+        if session.first_try_correct.get(intervention_id) is None:
+            session.first_try_correct[intervention_id] = is_correct
         session.interventions_state[intervention_id] = InterventionStateEnum.COMPLETED
         if session.active_intervention_id == intervention_id:
             session.active_intervention_id = None
