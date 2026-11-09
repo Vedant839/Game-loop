@@ -275,6 +275,8 @@ class EvaluatorService:
         sub = self.db.get_submission(submission_id)
         if not sub:
             raise ValueError(f"Submission '{submission_id}' not found.")
+        if sub["session_id"] != session_id:
+            raise ValueError("Submission not found for this session.")
 
         now_str = datetime.now(timezone.utc).isoformat()
         session_data = self.db.load_session(session_id)

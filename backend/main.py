@@ -514,6 +514,15 @@ def get_submission_status(session_id: str, submission_id: str) -> SubmissionStat
     if not sub:
         raise HTTPException(status_code=404, detail=f"Submission '{submission_id}' not found.")
 
+    if sub["session_id"] != session_id:
+        raise HTTPException(status_code=404, detail="Submission not found for this session.")
+
+    session_service = get_session_service()
+    try:
+        session_service._get_or_load_session(session_id)
+    except SessionError as exc:
+        raise HTTPException(status_code=404, detail="Session not found.") from exc
+
     status_val = SubmissionStatus(sub["status"])
 
     # Check for foreground timeout (5.0s threshold)
@@ -521,7 +530,6 @@ def get_submission_status(session_id: str, submission_id: str) -> SubmissionStat
     now_dt = datetime.now(timezone.utc)
     elapsed = (now_dt - created_dt).total_seconds()
 
-    session_service = get_session_service()
     if status_val == SubmissionStatus.PENDING and elapsed > 5.0:
         status_val = SubmissionStatus.TIMED_OUT
 

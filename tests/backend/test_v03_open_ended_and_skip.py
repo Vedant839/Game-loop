@@ -189,6 +189,47 @@ def test_self_assess_flow(test_client, lecture_with_open_ended):
     assert q_state["state"] == "COMPLETED"
 
 
+def test_submission_capability_is_bound_to_its_session(
+    test_client, lecture_with_open_ended
+):
+    owner = test_client.post(
+        "/api/sessions",
+        json={"lecture_id": lecture_with_open_ended.id, "client_id": "owner", "learner_id": "one"},
+    ).json()["session_id"]
+    other = test_client.post(
+        "/api/sessions",
+        json={"lecture_id": lecture_with_open_ended.id, "client_id": "other", "learner_id": "two"},
+    ).json()["session_id"]
+    test_client.post(
+        f"/api/sessions/{owner}/activate",
+        json={"intervention_id": "q_open_req", "playback_position": 25.0},
+    )
+    submission = test_client.post(
+        f"/api/sessions/{owner}/submissions/open-ended",
+        json={
+            "intervention_id": "q_open_req",
+            "idempotency_key": "owner-submission",
+            "user_answer": "An answer belonging only to the owner session.",
+        },
+    )
+    assert submission.status_code == 202
+    submission_id = submission.json()["submission_id"]
+
+    assert test_client.get(
+        f"/api/sessions/{owner}/submissions/{submission_id}"
+    ).status_code == 200
+    assert test_client.get(
+        f"/api/sessions/{other}/submissions/{submission_id}"
+    ).status_code == 404
+    assert test_client.post(
+        f"/api/sessions/{other}/submissions/{submission_id}/self-assess",
+        json={"self_assessed_correct": True},
+    ).status_code == 404
+    assert test_client.get(
+        "/api/sessions/fabricated-session/submissions/unknown-submission"
+    ).status_code == 404
+
+
 def test_telemetry_export(test_client, lecture_with_open_ended, creator_token_factory):
     # Trigger a skip to create a telemetry event
     resp = test_client.post(

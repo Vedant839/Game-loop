@@ -1,12 +1,20 @@
 """Small response-shape snapshots for the public V0.3 API routes."""
 
 from fastapi.testclient import TestClient
+from fastapi.routing import APIRoute
 
 from backend.database import get_database
 from backend.main import app
 
 
 client = TestClient(app)
+
+
+def test_no_api_route_accepts_uid_query_parameter() -> None:
+    for route in app.routes:
+        if isinstance(route, APIRoute):
+            assert "{uid" not in route.path.lower()
+            assert all(param.alias.lower() != "uid" for param in route.dependant.query_params)
 
 
 def _assert_student_lecture_has_no_private_fields(value) -> None:
