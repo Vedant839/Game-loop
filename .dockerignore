@@ -1,0 +1,32 @@
+# Python environments and caches
+.venv/
+**/.venv/
+__pycache__/
+**/__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local credentials and environment files
+.env
+.env.*
+**/.env
+**/.env.*
+*.env
+**/*.env
+
+# Local databases and generated runtime state
+*.db
+*.sqlite
+*.sqlite3
+*.db-*
+data/media/
+
+# Repository and frontend build dependencies
+.git/
+**/node_modules/
+frontend/dist/
+
+# Large local media and documents are not part of the backend image
+*.mp4
+*.pdf
