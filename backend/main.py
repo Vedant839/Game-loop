@@ -4,13 +4,13 @@ import uuid
 from typing import Any
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 import aiofiles
 import math
 
 from backend.config import get_settings
 from backend.auth import require_creator
-from backend.database import get_database
+from backend.database import DatabaseUnavailableError, get_database
 from backend.schemas.lecture import Lecture, LectureSummary, ResumptionPolicy
 from backend.schemas.session import (
     ActivateInterventionRequest,
@@ -48,6 +48,16 @@ app.add_middleware(
     allow_methods=["GET", "POST", "HEAD", "OPTIONS"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(DatabaseUnavailableError)
+async def database_unavailable_handler(
+    _request: Request, _exc: DatabaseUnavailableError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": "Database temporarily unavailable"},
+    )
 
 
 @app.get("/api/health")

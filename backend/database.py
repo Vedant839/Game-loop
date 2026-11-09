@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import http.client
 import json
 import logging
 import sqlite3
 import threading
+import time
+import urllib.error
+import urllib.request
+from collections.abc import Callable
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any, Generator, TypeVar
 
 from backend.config import get_settings
 from backend.repositories.creator_repository import CreatorRepository
@@ -20,6 +25,67 @@ from backend.repositories.submission_repository import SubmissionRepository
 from backend.repositories.telemetry_repository import TelemetryRepository
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
+
+
+class DatabaseUnavailableError(Exception):
+    """Database timed out or could not be reached."""
+
+
+def _install_turso_request_timeout(conn: Any, timeout_seconds: float) -> None:
+    """turso-serverless 0.1.0 Session._post has no timeout; wrap urlopen for the pin.
+
+    Mirrors the installed Session._post error handling and adds ``timeout=`` to
+    ``urllib.request.urlopen``, which the public connect API does not expose.
+    """
+    from turso_serverless.protocol import ProtocolError
+
+    session = conn._session
+
+    def _post_with_timeout(path: str, body: dict) -> bytes:
+        url = f"{session._base_url}{path}"
+        data = json.dumps(body, allow_nan=False).encode("utf-8")
+        req = urllib.request.Request(
+            url, data=data, headers=session._headers(), method="POST"
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:
+                return resp.read()
+        except TimeoutError as exc:
+            session._reset_stream()
+            raise DatabaseUnavailableError("database request timed out") from exc
+        except urllib.error.HTTPError as e:
+            raw = e.read().decode("utf-8", errors="replace")
+            session._reset_stream()
+            if e.code >= 500:
+                raise DatabaseUnavailableError("database service unavailable") from e
+            message = None
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, dict):
+                    for key in ("error", "message"):
+                        if isinstance(parsed.get(key), str):
+                            message = parsed[key]
+                            break
+            except ValueError:
+                pass
+            if message is not None:
+                raise ProtocolError(f"HTTP status {e.code}: {message}") from None
+            raise ProtocolError(f"HTTP status {e.code}") from None
+        except urllib.error.URLError as e:
+            session._reset_stream()
+            reason = getattr(e, "reason", e)
+            if isinstance(reason, TimeoutError) or "timed out" in str(reason).lower():
+                raise DatabaseUnavailableError("database request timed out") from e
+            raise DatabaseUnavailableError("database unreachable") from e
+        except (http.client.HTTPException, OSError) as e:
+            session._reset_stream()
+            if isinstance(e, TimeoutError) or "timed out" in str(e).lower():
+                raise DatabaseUnavailableError("database request timed out") from e
+            raise DatabaseUnavailableError("database unreachable") from e
+
+    session._post = _post_with_timeout  # type: ignore[method-assign]
 
 
 class Database:
@@ -36,7 +102,10 @@ class Database:
         if str(self.db_path) != ":memory:":
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self.backend = get_settings().database_backend.lower()
+        settings = get_settings()
+        self.backend = settings.database_backend.lower()
+        self.timeout_seconds = float(settings.database_timeout_seconds)
+        self.read_max_attempts = max(1, int(settings.database_read_max_attempts))
         self._lock = threading.Lock()
         self._init_db()
 
@@ -48,6 +117,31 @@ class Database:
         self.lectures = LectureRepository(self)
         self.creators = CreatorRepository(self)
 
+    def _retry_idempotent(self, operation: Callable[[], T], *, what: str) -> T:
+        """Retry reads and idempotent schema setup only.
+
+        Writes are never retried here. A timed-out write may already have been
+        applied server-side; blind retries can duplicate telemetry rows or
+        re-run non-idempotent DML after the client lost the response.
+        """
+        delay = 0.05
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                return operation()
+            except DatabaseUnavailableError:
+                if attempt >= self.read_max_attempts:
+                    raise
+                logger.warning(
+                    "Transient database failure during %s; retry %s/%s",
+                    what,
+                    attempt,
+                    self.read_max_attempts,
+                )
+                time.sleep(delay)
+                delay = min(delay * 2, 1.0)
+
     @contextmanager
     def connection(self) -> Generator[Any, None, None]:
         if self.backend == "turso":
@@ -58,21 +152,36 @@ class Database:
                 import turso_serverless
             except ImportError as exc:
                 raise RuntimeError("Install turso-serverless to use the Turso backend") from exc
-            conn = turso_serverless.connect(
-                settings.turso_database_url,
-                auth_token=settings.turso_auth_token.get_secret_value(),
-            )
+            try:
+                conn = turso_serverless.connect(
+                    settings.turso_database_url,
+                    auth_token=settings.turso_auth_token.get_secret_value(),
+                )
+            except Exception as exc:
+                raise DatabaseUnavailableError("database unreachable") from exc
             conn.row_factory = turso_serverless.Row
+            _install_turso_request_timeout(conn, self.timeout_seconds)
         elif self.backend == "sqlite":
-            conn = sqlite3.connect(
-                str(self.db_path), check_same_thread=False, timeout=30.0
-            )
+            try:
+                conn = sqlite3.connect(
+                    str(self.db_path),
+                    check_same_thread=False,
+                    timeout=self.timeout_seconds,
+                )
+            except sqlite3.Error as exc:
+                raise DatabaseUnavailableError("database unreachable") from exc
             conn.row_factory = sqlite3.Row
         else:
             raise ValueError(f"Unsupported database backend: {self.backend}")
         try:
             yield conn
             conn.commit()
+        except DatabaseUnavailableError:
+            conn.rollback()
+            raise
+        except TimeoutError as exc:
+            conn.rollback()
+            raise DatabaseUnavailableError("database request timed out") from exc
         except Exception:
             conn.rollback()
             raise
@@ -96,6 +205,9 @@ class Database:
         close. A non-transactional batch does not BEGIN or COMMIT, so it costs
         N statement requests plus close, and earlier statements stay applied
         if a later one fails.
+
+        Writes through this path are not retried: a lost response may still have
+        applied statements, so blind write retries risk duplication.
         """
         with self.connection() as conn:
             if self.backend == "turso" and not transactional:
@@ -113,7 +225,8 @@ class Database:
 
     def _init_db(self) -> None:
         """Create tables and initialize WAL mode."""
-        with self._lock:
+
+        def setup() -> None:
             with self.connection() as conn:
                 if self.backend == "sqlite":
                     if str(self.db_path) != ":memory:":
@@ -203,6 +316,9 @@ class Database:
                     );
                     """
                 )
+
+        with self._lock:
+            self._retry_idempotent(setup, what="schema setup")
         logger.info("Database initialized at %s", self.db_path)
 
     # -------------------------------------------------------------------------
@@ -224,7 +340,7 @@ class Database:
         learner_profile: dict[str, Any] | None = None,
         pending_submission: dict[str, Any] | None = None,
     ) -> None:
-        """Persist or update complete runtime session."""
+        """Persist or update complete runtime session. Writes are not retried."""
         with self._lock:
             self.sessions.save_session(
                 session_id=session_id,
@@ -243,7 +359,10 @@ class Database:
 
     def load_session(self, session_id: str) -> dict[str, Any] | None:
         """Load session record with intervention states and completed submissions."""
-        return self.sessions.load_session(session_id)
+        return self._retry_idempotent(
+            lambda: self.sessions.load_session(session_id),
+            what="load_session",
+        )
 
     # -------------------------------------------------------------------------
     # Learner Profile Persistence (delegates to LearnerRepository)
@@ -259,7 +378,7 @@ class Database:
         total_interventions: int,
         total_correct: int,
     ) -> None:
-        """Persist learner profile."""
+        """Persist learner profile. Writes are not retried."""
         with self._lock:
             self.learners.save_learner_profile(
                 client_id=client_id,
@@ -273,7 +392,10 @@ class Database:
 
     def load_learner_profile(self, client_id: str, user_id: str) -> dict[str, Any] | None:
         """Load learner profile from database."""
-        return self.learners.load_learner_profile(client_id, user_id)
+        return self._retry_idempotent(
+            lambda: self.learners.load_learner_profile(client_id, user_id),
+            what="load_learner_profile",
+        )
 
     # -------------------------------------------------------------------------
     # Submissions & Open-Ended Evaluations (delegates to SubmissionRepository)
@@ -298,6 +420,7 @@ class Database:
         evaluated_at: str | None = None,
         latency_ms: int | None = None,
     ) -> None:
+        """Persist a submission. Writes are not retried."""
         with self._lock:
             self.submissions.save_submission(
                 submission_id=submission_id,
@@ -319,7 +442,10 @@ class Database:
             )
 
     def get_submission(self, submission_id: str) -> dict[str, Any] | None:
-        return self.submissions.get_submission(submission_id)
+        return self._retry_idempotent(
+            lambda: self.submissions.get_submission(submission_id),
+            what="get_submission",
+        )
 
     # -------------------------------------------------------------------------
     # Telemetry (delegates to TelemetryRepository)
@@ -334,6 +460,7 @@ class Database:
         payload: dict[str, Any],
         timestamp: float | None = None,
     ) -> None:
+        """Append a telemetry event. Writes are not retried (insert is not idempotent)."""
         with self._lock:
             self.telemetry.record_telemetry(
                 client_id=client_id,
@@ -343,7 +470,6 @@ class Database:
                 payload=payload,
                 timestamp=timestamp,
             )
-
 
     def delete_learner(self, client_id: str, user_id: str) -> int:
         """Atomically remove a learner, their sessions, submissions, and telemetry."""
@@ -372,7 +498,10 @@ class Database:
     def export_telemetry(
         self, client_id: str | None = None, limit: int = 100
     ) -> list[dict[str, Any]]:
-        return self.telemetry.export_telemetry(client_id=client_id, limit=limit)
+        return self._retry_idempotent(
+            lambda: self.telemetry.export_telemetry(client_id=client_id, limit=limit),
+            what="export_telemetry",
+        )
 
 
 class TursoDatabase(Database):

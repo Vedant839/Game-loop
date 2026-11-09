@@ -60,6 +60,18 @@ class Settings(BaseSettings):
         default=500_000,
         validation_alias=AliasChoices("creator_monthly_token_cap", "CREATOR_MONTHLY_TOKEN_CAP"),
     )
+    database_timeout_seconds: float = Field(
+        default=10.0,
+        validation_alias=AliasChoices(
+            "database_timeout_seconds", "GAME_LOOP_DATABASE_TIMEOUT_SECONDS"
+        ),
+    )
+    database_read_max_attempts: int = Field(
+        default=3,
+        validation_alias=AliasChoices(
+            "database_read_max_attempts", "GAME_LOOP_DATABASE_READ_MAX_ATTEMPTS"
+        ),
+    )
 
     @property
     def project_root(self) -> Path:
