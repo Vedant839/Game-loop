@@ -9,12 +9,15 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 import aiofiles
 import math
+import time
+from typing import Literal
 
 from backend.config import get_settings
 from backend.auth import require_creator
 from backend.database import DatabaseUnavailableError, get_database
 from backend.lecture_sanitizer import sanitize_student_lecture
-from backend.schemas.lecture import Lecture, LectureSummary, ResumptionPolicy
+from backend.schemas.lecture import Lecture, LectureSummary, ResumptionPolicy, TimingConfig
+from backend.schemas.ingest import IngestLectureRequest
 from backend.schemas.session import (
     ActivateInterventionRequest,
     ActiveInterventionPayload,
@@ -33,10 +36,14 @@ from backend.schemas.session import (
     SubmissionStatusResponse,
     SubmitAnswerRequest,
     SyncPlaybackRequest,
+    TabEventRequest,
+    TabEventResponse,
 )
 from backend.services.lecture_service import get_lecture_service, _generate_for_lecture
 from backend.services.gemini_authoring_service import generate_interventions_with_gemini
 from backend.services.gemini_client import GeminiClient, GeminiQuotaExceeded
+from backend.services.checkpoint_generator import MIN_CHECKPOINT_GAP_SECONDS, checkpoint_count, enrich_generated_lecture
+from backend.utils.captions import CaptionParseError, TranscriptValidationError, parse_srt, parse_vtt
 from backend.services.session_service import SessionError, get_session_service
 from backend.services.learner_service import get_learner_service
 from backend.services.evaluator_service import get_evaluator_service
@@ -111,6 +118,105 @@ def create_lecture(
     return lecture
 
 
+@app.post("/api/creator/ingest", response_model=Lecture, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute", key_func=get_creator_rate_limit_key)
+def ingest_lecture(
+    request: Request,
+    payload: IngestLectureRequest,
+    response: Response,
+    creator: dict[str, str] = Depends(require_creator),
+) -> Lecture:
+    """Parse uploaded captions, author checkpoints, and save a creator lecture."""
+    started_at = time.perf_counter()
+    try:
+        if payload.captions_format == "srt":
+            transcript = parse_srt(payload.captions)
+        elif payload.captions_format == "vtt":
+            transcript = parse_vtt(payload.captions)
+        elif payload.captions.strip():
+            from backend.schemas.lecture import TranscriptSegment
+
+            lines = [line.strip() for line in payload.captions.splitlines() if line.strip()]
+            width = payload.duration_seconds / max(len(lines), 1)
+            transcript = [
+                TranscriptSegment(start_time=i * width, end_time=(i + 1) * width, text=line)
+                for i, line in enumerate(lines)
+            ]
+        else:
+            transcript = []
+    except (CaptionParseError, TranscriptValidationError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+
+    lecture_id = "ingest_" + uuid.uuid4().hex[:12]
+    lecture = Lecture(
+        id=lecture_id,
+        title=payload.title.strip(),
+        subject=payload.subject.strip(),
+        grade=payload.grade.strip(),
+        duration_seconds=payload.duration_seconds,
+        video_url=payload.video_url,
+        transcript=transcript,
+        timing_config=TimingConfig(min_trigger_gap=MIN_CHECKPOINT_GAP_SECONDS, tolerance=2.0),
+        interventions=[],
+    )
+    max_count = checkpoint_count(payload.duration_seconds, payload.intensity)
+    api_key = (request.headers.get("X-Gemini-Key") or "").strip()
+    creator_supplied_key = bool(api_key)
+    if not api_key and settings.gemini_api_key is not None:
+        api_key = settings.gemini_api_key.get_secret_value()
+    if api_key and max_count:
+        db = get_database()
+        try:
+            lecture = generate_interventions_with_gemini(
+                lecture=lecture,
+                api_key=api_key,
+                target_count=max_count,
+                max_count=max_count,
+                creator_id=creator["creator_id"],
+                db=db,
+                gemini_client=GeminiClient(db=db, settings=settings),
+                enforce_monthly_cap=not creator_supplied_key,
+            )
+            lecture = enrich_generated_lecture(lecture, payload.intensity)
+            response.headers["X-Generation-Mode"] = "gemini"
+        except GeminiQuotaExceeded:
+            raise HTTPException(status_code=429, detail="Monthly Gemini token cap reached") from None
+        except RuntimeError:
+            raise HTTPException(status_code=502, detail="Gemini generation failed") from None
+    else:
+        lecture = _generate_for_lecture(lecture, max_count=max_count, intensity=payload.intensity)
+        response.headers["X-Generation-Mode"] = "deterministic"
+
+    service = get_lecture_service()
+    service.save_lecture(lecture)
+    video_url_lower = lecture.video_url.lower()
+    source_type = (
+        "youtube" if "youtube.com/" in video_url_lower or "youtu.be/" in video_url_lower
+        else "vimeo" if "vimeo.com/" in video_url_lower
+        else "direct"
+    )
+    get_database().lectures.save_lecture(
+        lecture_id=lecture.id,
+        creator_id=creator["creator_id"],
+        title=lecture.title,
+        video_url=lecture.video_url,
+        source_type=source_type,
+        content_json=lecture.model_dump_json(),
+    )
+    try:
+        get_database().record_telemetry(
+            client_id=creator["creator_id"],
+            session_id=f"ingest_{lecture.id}",
+            user_id=creator["creator_id"],
+            event_type="lecture_ingestion_completed",
+            payload={"duration_ms": round((time.perf_counter() - started_at) * 1000), "intensity": payload.intensity},
+        )
+    except Exception:
+        # Telemetry must not make an otherwise successful ingestion fail.
+        pass
+    return lecture
+
+
 @app.get("/api/lectures", response_model=list[LectureSummary])
 def list_lectures() -> list[LectureSummary]:
     """List available lectures."""
@@ -180,7 +286,8 @@ def get_studio_lecture(
 def generate_interventions_for_lecture(
     request: Request,
     lecture_id: str,
-    max_count: int = 4,
+    max_count: int | None = None,
+    intensity: Literal["light", "standard", "intense"] = "standard",
     creator: dict[str, str] = Depends(require_creator),
 ):
     """Generate interventions for a lecture, grounded in its actual transcript content.
@@ -201,13 +308,20 @@ def generate_interventions_for_lecture(
     canonical_lecture = service.get_lecture_by_file(lecture_path)
     generation_lecture = canonical_lecture.model_copy(deep=True)
     generation_lecture.interventions = []
+    generation_lecture.timing_config = TimingConfig(
+        min_trigger_gap=MIN_CHECKPOINT_GAP_SECONDS,
+        tolerance=min(generation_lecture.timing_config.tolerance, 2.0),
+    )
+    requested_count = max_count if max_count is not None else checkpoint_count(
+        generation_lecture.duration_seconds, intensity
+    )
 
     x_gemini_key = request.headers.get("X-Gemini-Key")
     api_key = (x_gemini_key or "").strip()
     creator_supplied_key = bool(api_key)
     if not api_key and settings.gemini_api_key is not None:
         api_key = settings.gemini_api_key.get_secret_value()
-    if api_key:
+    if api_key and requested_count:
         db = get_database()
         creator_id = creator["creator_id"] if isinstance(creator, dict) else "default_client"
         gemini_client = GeminiClient(db=db, settings=settings)
@@ -215,13 +329,14 @@ def generate_interventions_for_lecture(
             generated = generate_interventions_with_gemini(
                 lecture=generation_lecture,
                 api_key=api_key,
-                target_count=max_count,
-                max_count=max_count,
+                target_count=requested_count,
+                max_count=requested_count,
                 creator_id=creator_id,
                 db=db,
                 gemini_client=gemini_client,
                 enforce_monthly_cap=not creator_supplied_key,
             )
+            generated = enrich_generated_lecture(generated, intensity)
             service.set_runtime_lecture(generated)
             return generated
         except GeminiQuotaExceeded:
@@ -230,7 +345,7 @@ def generate_interventions_for_lecture(
             raise HTTPException(status_code=502, detail="Gemini generation failed") from None
 
     # No API key configured — fall back to deterministic generator
-    generated = _generate_for_lecture(generation_lecture, max_count)
+    generated = _generate_for_lecture(generation_lecture, requested_count, intensity)
     service.set_runtime_lecture(generated)
     return generated
 
@@ -289,6 +404,18 @@ def sync_playback(session_id: str, req: SyncPlaybackRequest) -> SessionState:
         )
     except SessionError as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)
+
+
+@app.post("/api/sessions/{session_id}/tab_event", response_model=TabEventResponse)
+@limiter.limit("30/minute", key_func=get_real_client_ip)
+def session_tab_event(
+    request: Request, session_id: str, req: TabEventRequest
+) -> TabEventResponse:
+    """Offer a sanitized recall card after more than 60 seconds away."""
+    try:
+        return TabEventResponse(**get_session_service().tab_event(session_id, req.away_seconds))
+    except SessionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from None
 
 
 @app.post("/api/sessions/{session_id}/submit", response_model=EvaluationResult)

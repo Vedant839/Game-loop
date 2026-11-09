@@ -6,6 +6,7 @@ from backend.config import get_settings
 from backend.schemas.lecture import Lecture, LectureSummary
 from backend.schemas.lecture import Intervention, Option, InterventionType, Difficulty
 from backend.schemas.lecture import TranscriptSegment
+from backend.services.checkpoint_generator import SPACING_SECONDS, enrich_generated_lecture
 
 
 class LectureService:
@@ -98,14 +99,16 @@ def _nearest_transcript_segment(lecture: Lecture, time: float) -> TranscriptSegm
     return best
 
 
-def _build_generated_interventions(lecture: Lecture, max_count: int) -> list[Intervention]:
+def _build_generated_interventions(
+    lecture: Lecture, max_count: int, intensity: str = "standard"
+) -> list[Intervention]:
     # Determine seed trigger times across lecture duration
     dur = lecture.duration_seconds
     if dur <= 0:
         return []
 
-    fractions = [0.2, 0.4, 0.6, 0.8]
-    times = [min(dur - 1.0, max(0.0, dur * f)) for f in fractions[:max_count]]
+    spacing = SPACING_SECONDS.get(intensity, SPACING_SECONDS["standard"])
+    times = [min(dur - 20.0, spacing * (index + 1)) for index in range(max_count)]
 
     # Enforce min_trigger_gap between successive generated times
     min_gap = lecture.timing_config.min_trigger_gap
@@ -148,9 +151,11 @@ def _build_generated_interventions(lecture: Lecture, max_count: int) -> list[Int
     return interventions
 
 
-def _generate_for_lecture(lecture: Lecture, max_count: int = 4) -> Lecture:
+def _generate_for_lecture(
+    lecture: Lecture, max_count: int = 4, intensity: str = "standard"
+) -> Lecture:
     # Clone lecture and attach generated interventions (do not persist changes)
     generated = lecture.model_copy()
-    generated.interventions = _build_generated_interventions(generated, max_count)
-    return generated
+    generated.interventions = _build_generated_interventions(generated, max_count, intensity)
+    return enrich_generated_lecture(generated, intensity)
 

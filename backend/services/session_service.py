@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import uuid
+import html
+import re
+from datetime import datetime, timezone
 from typing import Any
 
 from backend.database import Database, get_database
@@ -57,6 +60,8 @@ class RuntimeSession:
             intv.id: None for intv in lecture.interventions
         }
         self.completed_submissions: dict[str, EvaluationResult] = {}
+        self.last_tab_recall_at: datetime | None = None
+        self.tab_recall_count = 0
 
     def get_state(self) -> SessionState:
         return SessionState(
@@ -187,6 +192,44 @@ class SessionService:
         self._sessions[session_id] = session
         self._persist_session(session)
         return session.get_state()
+
+    def tab_event(self, session_id: str, away_seconds: float) -> dict[str, Any]:
+        """Return one sanitized, non-blocking recall card after a long tab absence."""
+        session = self._get_or_load_session(session_id)
+        if away_seconds <= 60:
+            return {"card": None, "reason": "away_time_too_short"}
+        now = datetime.now(timezone.utc)
+        stored_last = self.db.telemetry.latest_tab_recall(session_id)
+        last_recall = (
+            datetime.fromisoformat(stored_last)
+            if stored_last
+            else session.last_tab_recall_at
+        )
+        if last_recall and (now - last_recall).total_seconds() < 300:
+            return {"card": None, "reason": "cooldown"}
+        if session.active_intervention_id:
+            return {"card": None, "reason": "intervention_active"}
+
+        pool = session.lecture.recall_pool
+        if pool:
+            item = pool[session.tab_recall_count % len(pool)]
+            question = item.get("question") or "What is one key idea you remember from the lecture?"
+            card_id = str(item.get("id") or f"tab_recall_{session.tab_recall_count + 1}")
+        elif session.lecture.transcript:
+            segment = session.lecture.transcript[session.tab_recall_count % len(session.lecture.transcript)]
+            question = f"What is one idea you remember about: {segment.text}"
+            card_id = f"tab_recall_{session.tab_recall_count + 1}"
+        else:
+            return {"card": None, "reason": "no_recall_content"}
+
+        question = html.unescape(re.sub(r"<[^>]*>", " ", str(question)))
+        question = " ".join(re.sub(r"[\x00-\x1f\x7f]", " ", question).split())[:500]
+        if not question:
+            return {"card": None, "reason": "no_recall_content"}
+        session.last_tab_recall_at = now
+        session.tab_recall_count += 1
+        self.db.telemetry.record_tab_recall(session_id, away_seconds)
+        return {"card": {"id": card_id[:100], "question": question, "type": "flash_recall"}, "reason": None}
 
     def get_session(self, session_id: str) -> SessionState:
         session = self._get_or_load_session(session_id)

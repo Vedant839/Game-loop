@@ -5,7 +5,8 @@ export type InterventionType =
   | "multiple_selection"
   | "predict_and_verify"
   | "inquiry_sandbox"
-  | "open_ended";
+  | "open_ended"
+  | "flash_recall";
 
 export type InterventionState =
   | "PENDING"
@@ -68,6 +69,7 @@ export interface InterventionVariant {
 
 export interface Intervention {
   id: string;
+  revision?: number;
   trigger_time: number;
   concept: string;
   difficulty: Difficulty;
@@ -78,6 +80,11 @@ export interface Intervention {
   correct_feedback: string;
   incorrect_feedback: string;
   sandbox_config?: SandboxConfig | null;
+  mobile_fallback?: {
+    question: string;
+    options: Option[];
+    correct_answer?: string | string[] | null;
+  } | null;
   hypothesis_prompt?: string | null;
   hypothesis_options?: Option[];
   variants?: Record<number, InterventionVariant>;
@@ -107,6 +114,7 @@ export interface Lecture {
   timing_config: TimingConfig;
   transcript: TranscriptSegment[];
   interventions: Intervention[];
+  recall_pool?: Array<{ id: string; type: "flash_recall"; question: string; expected_answer: string }>;
 }
 
 export interface LectureSummary {
@@ -133,6 +141,12 @@ export interface SessionState {
   external_user_id?: string | null;
   active_intervention_id: string | null;
   interventions: InterventionSessionState[];
+}
+
+export interface TabRecallCard {
+  id: string;
+  question: string;
+  type: "flash_recall";
 }
 
 export interface ActiveInterventionPayload {

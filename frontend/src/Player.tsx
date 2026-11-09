@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
-import { HTML5VideoAdapter, type VideoPlayerAdapter } from "./adapters/PlayerAdapter";
+import { getVideoSource, HTML5VideoAdapter, VimeoPlayerAdapter, YouTubePlayerAdapter, type VideoPlayerAdapter } from "./adapters/PlayerAdapter";
 import {
   activateIntervention,
+  reportTabReturn,
   selfAssessSubmission,
   skipIntervention,
   submitAnswer,
@@ -18,6 +19,7 @@ import type {
   Lecture,
   OpenEndedSubmissionResponse,
   SessionState,
+  TabRecallCard,
 } from "./types";
 
 export interface PlayerProps {
@@ -37,8 +39,10 @@ export default function Player({
   playerAdapter,
 }: PlayerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const frameRef = useRef<HTMLIFrameElement | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
-  const internalAdapterRef = useRef<HTML5VideoAdapter | null>(null);
+  const internalAdapterRef = useRef<VideoPlayerAdapter | null>(null);
+  const hlsRef = useRef<{ destroy: () => void } | null>(null);
 
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [activeIntervention, setActiveIntervention] =
@@ -48,10 +52,13 @@ export default function Player({
   );
   const [lastCheckTime, setLastCheckTime] = useState<number>(0);
   const activeLockTimeRef = useRef<number | null>(null);
+  const hiddenAtRef = useRef<number | null>(null);
+  const [tabRecallCard, setTabRecallCard] = useState<TabRecallCard | null>(null);
 
-  const videoSrc = lecture.video_url.startsWith("http")
-    ? lecture.video_url
-    : `${mediaBaseUrl}${lecture.video_url}`;
+  const videoSource = getVideoSource(lecture.video_url);
+  const videoSrc = videoSource.kind === "direct"
+    ? (videoSource.url.startsWith("http") ? videoSource.url : `${mediaBaseUrl}${videoSource.url}`)
+    : "";
 
   const tolerance = lecture.timing_config.tolerance;
   const sessionInterventionById = new Map(
@@ -64,19 +71,39 @@ export default function Player({
     return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
   };
 
-  // Attach internal HTML5 adapter when videoRef is available and no external adapter provided
+  // Select the built-in adapter for direct media or provider iframe playback.
   useEffect(() => {
-    if (!playerAdapter && videoRef.current) {
-      if (!internalAdapterRef.current) {
-        internalAdapterRef.current = new HTML5VideoAdapter(videoRef.current);
-      } else {
-        internalAdapterRef.current.attach(videoRef.current);
+    if (playerAdapter) return;
+    let disposed = false;
+    const video = videoRef.current;
+    const frame = frameRef.current;
+    if (video && videoSource.kind === "direct") {
+      if (videoSource.isHls && !video.canPlayType("application/vnd.apple.mpegurl")) {
+        void import("hls.js").then(({ default: Hls }) => {
+          if (disposed || !Hls.isSupported()) return;
+          const hls = new Hls();
+          hls.loadSource(videoSrc);
+          hls.attachMedia(video);
+          hlsRef.current = hls;
+        });
       }
+      internalAdapterRef.current = new HTML5VideoAdapter(video);
+    } else if (frame && videoSource.kind === "youtube") {
+      internalAdapterRef.current = new YouTubePlayerAdapter(frame);
+    } else if (frame && videoSource.kind === "vimeo") {
+      internalAdapterRef.current = new VimeoPlayerAdapter(frame);
     }
     return () => {
-      internalAdapterRef.current?.detach();
+      disposed = true;
+      if (internalAdapterRef.current instanceof HTML5VideoAdapter) internalAdapterRef.current.detach();
+      else internalAdapterRef.current?.destroy();
+      internalAdapterRef.current = null;
+      hlsRef.current?.destroy();
+      hlsRef.current = null;
     };
-  }, [playerAdapter]);
+  }, [playerAdapter, videoSource.kind, videoSrc]);
+
+  const getActiveAdapter = (): VideoPlayerAdapter | null => playerAdapter ?? internalAdapterRef.current;
 
   // Fullscreen management: Fullscreen the wrapper so overlays and dialogs remain visible
   useEffect(() => {
@@ -94,6 +121,24 @@ export default function Player({
       document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
     };
   }, []);
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAtRef.current = Date.now();
+        return;
+      }
+      if (hiddenAtRef.current === null) return;
+      const awaySeconds = (Date.now() - hiddenAtRef.current) / 1000;
+      hiddenAtRef.current = null;
+      if (awaySeconds <= 60) return;
+      void reportTabReturn(sessionState.session_id, awaySeconds)
+        .then((card) => { if (card) setTabRecallCard(card); })
+        .catch(() => {});
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [sessionState.session_id]);
 
   const toggleFullscreen = async () => {
     const wrapper = wrapperRef.current;
@@ -169,7 +214,7 @@ export default function Player({
 
   // Trigger window detection on timeupdate
   const handleTimeUpdate = async () => {
-    const adapter = playerAdapter ?? internalAdapterRef.current;
+    const adapter = getActiveAdapter();
     const video = videoRef.current;
     const currentTime = adapter ? adapter.getCurrentTime() : (video?.currentTime ?? 0);
 
@@ -213,7 +258,7 @@ export default function Player({
 
   // Seeking sync
   const handleSeeking = async () => {
-    const adapter = playerAdapter ?? internalAdapterRef.current;
+    const adapter = getActiveAdapter();
     const video = videoRef.current;
     const currentTime = adapter ? adapter.getCurrentTime() : (video?.currentTime ?? 0);
 
@@ -234,6 +279,15 @@ export default function Player({
       // Ignore sync errors during seek
     }
   };
+
+  useEffect(() => {
+    if (!playerAdapter && videoSource.kind === "direct") return;
+    const adapter = getActiveAdapter();
+    if (!adapter) return;
+    const offTime = adapter.onTimeUpdate(() => { void handleTimeUpdate(); });
+    const offSeeking = adapter.onSeeking(() => { void handleSeeking(); });
+    return () => { offTime(); offSeeking(); };
+  }, [playerAdapter, videoSource.kind, sessionState.session_id, handleTimeUpdate, handleSeeking]);
 
   const handleSubmitAnswer = async (
     answer: string | string[]
@@ -312,7 +366,7 @@ export default function Player({
   const handleFeedbackComplete = () => {
     setActiveIntervention(null);
     activeLockTimeRef.current = null;
-    const adapter = playerAdapter ?? internalAdapterRef.current;
+    const adapter = getActiveAdapter();
     const video = videoRef.current;
     if (adapter) {
       void adapter.play().catch(() => {});
@@ -332,7 +386,7 @@ export default function Player({
     const clickX = e.clientX - rect.left;
     const clickRatio = Math.max(0, Math.min(1, clickX / rect.width));
     const targetTime = clickRatio * lecture.duration_seconds;
-    const adapter = playerAdapter ?? internalAdapterRef.current;
+    const adapter = getActiveAdapter();
     const video = videoRef.current;
     if (adapter) {
       adapter.seekTo(targetTime);
@@ -347,17 +401,13 @@ export default function Player({
         ref={wrapperRef}
         className={`video-wrapper ${isApproachingCheckpoint ? "approaching-glow" : ""} ${isFullscreen ? "is-fullscreen" : ""}`}
       >
-        <video
-          ref={videoRef}
-          src={videoSrc}
-          controls={!activeIntervention}
-          onTimeUpdate={handleTimeUpdate}
-          onSeeking={handleSeeking}
-          className="lecture-video"
-          data-testid="lecture-video"
-        >
-          Your browser does not support the video tag.
-        </video>
+        {videoSource.kind === "direct" ? (
+          <video ref={videoRef} src={videoSrc} controls={!activeIntervention} onTimeUpdate={playerAdapter ? undefined : handleTimeUpdate} onSeeking={playerAdapter ? undefined : handleSeeking} className="lecture-video" data-testid="lecture-video">
+            Your browser does not support the video tag.
+          </video>
+        ) : (
+          <iframe ref={frameRef} src={videoSource.embedUrl} title={lecture.title} className="lecture-video provider-frame" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />
+        )}
 
         {/* Custom floating fullscreen button that fullscreens the wrapper */}
         <button
@@ -380,6 +430,13 @@ export default function Player({
             onSkip={handleSkipIntervention}
             onFeedbackComplete={handleFeedbackComplete}
           />
+        )}
+        {tabRecallCard && !activeIntervention && (
+          <aside className="tab-return-recall" role="status" data-testid="tab-return-recall">
+            <strong>Welcome back</strong>
+            <p>{tabRecallCard.question}</p>
+            <button type="button" aria-label="Dismiss recall card" onClick={() => setTabRecallCard(null)}>Dismiss</button>
+          </aside>
         )}
       </div>
 
@@ -418,7 +475,7 @@ export default function Player({
                 onClick={(e) => {
                   e.stopPropagation();
                   if (activeIntervention) return;
-                  const adapter = playerAdapter ?? internalAdapterRef.current;
+                  const adapter = getActiveAdapter();
                   const video = videoRef.current;
                   if (adapter) {
                     adapter.seekTo(intv.trigger_time);

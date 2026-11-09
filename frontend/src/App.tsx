@@ -10,6 +10,7 @@ import {
   hasTabOnlyProgress,
 } from "./api";
 import Player from "./Player";
+import IngestPage from "./studio/IngestPage";
 import type { Lecture, LectureSummary, SessionState } from "./types";
 
 const createLectureFormDefaults = {
@@ -90,6 +91,7 @@ export default function App() {
   const [generationState, setGenerationState] = useState<GenerationState>("idle");
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [showAddLectureForm, setShowAddLectureForm] = useState(false);
+  const [showIngestPage, setShowIngestPage] = useState(false);
   const [newLectureForm, setNewLectureForm] = useState(createLectureFormDefaults);
 
   // On mount: health check + load lecture list
@@ -220,6 +222,19 @@ export default function App() {
 
   const isGenerating = generationState === "generating";
 
+  const handleIngestComplete = useCallback((lecture: Lecture) => {
+    setLectures((previous) => [
+      ...previous.filter((item) => item.id !== lecture.id),
+      {
+        id: lecture.id, title: lecture.title, subject: lecture.subject,
+        grade: lecture.grade, duration_seconds: lecture.duration_seconds,
+        video_url: lecture.video_url, intervention_count: lecture.interventions.length,
+      },
+    ]);
+    setShowIngestPage(false);
+    setSelectedLectureId(lecture.id);
+  }, []);
+
   return (
     <main>
       <h1>game-loop</h1>
@@ -239,7 +254,11 @@ export default function App() {
         </p>
       )}
 
-      {connectionState === "available" && lectures.length > 0 && (
+      {showIngestPage && (
+        <IngestPage onComplete={handleIngestComplete} onCancel={() => setShowIngestPage(false)} />
+      )}
+
+      {!showIngestPage && connectionState === "available" && lectures.length > 0 && (
         <div className="lecture-selector">
           <label htmlFor="lecture-select">Select Lecture:</label>
           <select
@@ -264,6 +283,10 @@ export default function App() {
             {showAddLectureForm ? "Hide lecture form" : "Add Lecture"}
           </button>
 
+          <button type="button" className="generate-btn" onClick={() => setShowIngestPage(true)}>
+            Import video
+          </button>
+
           <button
             id="generate-interventions-btn"
             onClick={handleGenerateInterventions}
@@ -275,7 +298,11 @@ export default function App() {
         </div>
       )}
 
-      {showAddLectureForm && (
+      {!showIngestPage && connectionState === "available" && lectures.length === 0 && (
+        <button type="button" className="generate-btn" onClick={() => setShowIngestPage(true)}>Import video</button>
+      )}
+
+      {!showIngestPage && showAddLectureForm && (
         <form onSubmit={handleAddLecture} className="add-lecture-form">
           <h3>Add a lecture</h3>
           <div className="form-grid">

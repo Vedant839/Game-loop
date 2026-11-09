@@ -80,6 +80,21 @@ class SyncPlaybackRequest(BaseModel):
     expected_version: int | None = None
 
 
+class TabEventRequest(BaseModel):
+    away_seconds: float = Field(..., ge=0, le=86400)
+
+
+class TabRecallCard(BaseModel):
+    id: str
+    question: str
+    type: str = "flash_recall"
+
+
+class TabEventResponse(BaseModel):
+    card: TabRecallCard | None = None
+    reason: str | None = None
+
+
 class EvaluationResult(BaseModel):
     is_correct: bool
     feedback: str

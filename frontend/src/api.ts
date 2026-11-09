@@ -6,6 +6,7 @@ import type {
   OpenEndedSubmissionResponse,
   SessionState,
   SubmissionStatusResponse,
+  TabRecallCard,
 } from "./types";
 
 export type HealthStatus = {
@@ -81,6 +82,39 @@ export async function createLecture(lecture: Lecture): Promise<Lecture> {
   if (!response.ok) {
     const errorData = (await response.json().catch(() => ({}))) as { detail?: string };
     throw new Error(errorData.detail ?? "Failed to create lecture.");
+  }
+  return (await response.json()) as Lecture;
+}
+
+export interface IngestLecturePayload {
+  title: string;
+  subject: string;
+  grade: string;
+  video_url: string;
+  duration_seconds: number;
+  captions: string;
+  captions_format: "srt" | "vtt" | "text";
+  intensity: "light" | "standard" | "intense";
+}
+
+export async function ingestLecture(
+  payload: IngestLecturePayload,
+  creatorToken: string,
+  geminiKey?: string
+): Promise<Lecture> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${creatorToken}`,
+    "Content-Type": "application/json",
+  };
+  if (geminiKey?.trim()) headers["X-Gemini-Key"] = geminiKey.trim();
+  const response = await fetchWithTimeout(
+    `${getApiBaseUrl()}/api/creator/ingest`,
+    { method: "POST", headers, body: JSON.stringify(payload) },
+    180000
+  );
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(body.detail ?? "Lecture ingestion failed.");
   }
   return (await response.json()) as Lecture;
 }
@@ -183,6 +217,17 @@ export async function syncPlayback(
     throw new Error("Failed to sync playback position.");
   }
   return (await response.json()) as SessionState;
+}
+
+export async function reportTabReturn(sessionId: string, awaySeconds: number): Promise<TabRecallCard | null> {
+  const response = await fetchWithTimeout(`${getApiBaseUrl()}/api/sessions/${sessionId}/tab_event`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ away_seconds: awaySeconds }),
+  });
+  if (!response.ok) throw new Error("Could not check for a recall card.");
+  const result = await response.json() as { card: TabRecallCard | null };
+  return result.card;
 }
 
 export async function submitAnswer(

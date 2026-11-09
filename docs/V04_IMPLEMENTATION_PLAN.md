@@ -591,11 +591,11 @@ gcloud run deploy game-loop-api \
 - **Exit Gate:** Current baseline passes (88 backend, 21 frontend), plus P0 repository contract, storage fallback, and shared Gemini client tests. Turso contract tests remain unrun.
 
 ### P1 — Ingestion & Video Adapters
-- [ ] **P1.1: IngestPage & Caption Parsers** — Caption parsing and transcript timing validation are implemented; implement `frontend/src/studio/IngestPage.tsx` (URL input, SRT/VTT file dropzone, browser-side audio upload with creator's key, intensity selector, progress bar).
-- [ ] **P1.2: Video Adapters** — Verify player adapters for YouTube, Vimeo, and direct MP4/HLS.
-- [ ] **P1.3: Checkpoint Generator** — Add `InterventionType.FLASH_RECALL`. Implement content-based placement heuristics, intensity overrides, mobile fallback pre-generation, and `recall_pool` generation. Remove hard intervention limit of 6.
-- [ ] **P1.4: Tab-Return Attention Trigger** — Implement `POST /api/sessions/{id}/tab_event` with 60s away check, 300s cooldown, sanitized recall question delivery, and recall pool fallback.
-- **Exit Gate:** All caption formats parse cleanly. Checkpoints generate with revisions and mobile fallbacks.
+- [x] **P1.1: IngestPage & Caption Parsers** — Added creator-authenticated ingestion for video URLs and SRT/VTT/text captions, browser-only audio transcription with the creator's session key, intensity selection, progress states, and ingestion-duration telemetry.
+- [x] **P1.2: Video Adapters** — Added YouTube and Vimeo iframe adapters plus HTML5 MP4 and HLS playback through `hls.js`. Source detection and provider message behavior have local tests; live playback against external providers still needs a manual smoke check.
+- [x] **P1.3: Checkpoint Generator** — Checkpoints use transcript boundaries and Light/Standard/Intense spacing (5–6, 3–4, and 2–3 minutes, with 90 seconds minimum). Removed the six-checkpoint cap, generated mobile MCQ fallbacks for sandbox checkpoints, and created an unscheduled 3–5 item Flash Recall pool.
+- [x] **P1.4: Tab-Return Attention Trigger** — Added `POST /api/sessions/{id}/tab_event`, a >60s away check, persisted 300s cooldown, sanitized recall-card delivery, and a non-blocking player card that does not pause playback.
+- **Exit Gate (PASS locally):** Caption formats parse cleanly; generated checkpoints retain revisions and include mobile fallbacks and recall pools. External provider playback still needs a manual smoke check.
 
 ### P2 — Cognitive UX & Grading
 - [ ] **P2.1: Flash Recall Component & Backend Evaluator** — Implement `FlashRecallCard.tsx` (single attempt, explicit tap) and backend normalized string evaluator.
@@ -704,7 +704,7 @@ Statuses reflect the current implementation and latest local evidence. `NOT VERI
 
 | Criterion | Test name / evidence | Status |
 |---:|---|---|
-| 1 | Host full suites: backend 88 passed; frontend 21 passed | PASS |
+| 1 | Host full suites: backend 93 passed; frontend 25 passed | PASS |
 | 2 | Frontend Vitest suite: 21 passed | PASS |
 | 3 | Static SQL audit: SQL is confined to `backend/database.py` and `backend/repositories/` | PASS |
 | 4 | `test_v03_migration_is_guarded_and_idempotent` | PASS |
@@ -725,9 +725,9 @@ Statuses reflect the current implementation and latest local evidence. `NOT VERI
 | 19 | No score-correction monotonicity test found | NOT IMPLEMENTED |
 | 20 | `test_sanitizer_removes_nested_student_secrets_without_mutating_source`; public and session route sanitization tests | PASS |
 | 21 | `test_hints_are_gated_by_persisted_attempt_count` verifies pre-attempt rejection and persisted hint selection | PASS |
-| 22 | No ingestion duration instrumentation/test found | NOT IMPLEMENTED |
+| 22 | `test_creator_ingest_parses_captions_and_persists_lecture` checks captured ingestion-duration telemetry without a latency threshold | PASS |
 | 23 | `tests/backend/test_captions.py` covers SRT/VTT parsing, timestamps, tags, empty/overlapping cues, malformed input, ordering, and gaps | PASS |
-| 24 | `test_flash_recall_revision_mobile_fallback_and_recall_pool_schema` validates the fields; generation remains pending | PARTIAL |
+| 24 | `test_intensity_changes_density_and_allows_more_than_six_checkpoints`; `test_sandbox_checkpoints_receive_mobile_multiple_choice_fallback`; `test_flash_recall_revision_mobile_fallback_and_recall_pool_schema` | PASS |
 | 25 | Creator lecture creation and Studio reads use the database; public/session reads still use lecture files | PARTIAL |
 | 26 | No checkpoint revision edit test found | NOT IMPLEMENTED |
 | 27 | Server-side flash recall without Gemini is not implemented | NOT IMPLEMENTED |
@@ -739,8 +739,8 @@ Statuses reflect the current implementation and latest local evidence. `NOT VERI
 | 33 | Static scan found no Smart Replay strings in `frontend/src` | PASS |
 | 34 | `test_v03_engine_streak_characterization` | PASS |
 | 35 | No immediate Mastery Ring update test found | NOT IMPLEMENTED |
-| 36 | Tab-return recall behavior is not implemented | NOT IMPLEMENTED |
-| 37 | Duplicate tab-return suppression is not implemented | NOT IMPLEMENTED |
+| 36 | `test_tab_return_requires_more_than_sixty_seconds_and_obeys_cooldown`; `Player tab return recall` verifies display without pausing playback | PASS |
+| 37 | `test_tab_return_requires_more_than_sixty_seconds_and_obeys_cooldown` verifies the persisted cooldown across session-service reload | PASS |
 | 38 | Mobile sandbox fallback is not implemented | NOT IMPLEMENTED |
 | 39 | Sanitized study guide rendering is not implemented | NOT IMPLEMENTED |
 | 40 | Mid-lecture study guide filtering is not implemented | NOT IMPLEMENTED |

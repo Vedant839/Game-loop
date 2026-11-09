@@ -64,6 +64,24 @@ h1 {
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
 }
 
+.ingest-page {
+  margin: 0 0 1.5rem;
+  padding: 1.5rem;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+}
+
+.ingest-page form { display: grid; gap: 0.9rem; }
+.ingest-page label { display: grid; gap: 0.35rem; color: var(--text-muted); }
+.ingest-page input, .ingest-page textarea, .ingest-page select {
+  width: 100%; box-sizing: border-box; padding: 0.6rem 0.7rem;
+  color: var(--text-primary); background: #0f172a;
+  border: 1px solid var(--border-color); border-radius: 0.375rem;
+}
+.ingest-actions { display: flex; gap: 0.75rem; }
+.ingest-actions button { padding: 0.6rem 1rem; border-radius: 0.375rem; cursor: pointer; }
+
 .lecture-header {
   margin-bottom: 1rem;
 }
@@ -100,6 +118,18 @@ h1 {
   display: block;
   max-height: 540px;
 }
+
+.provider-frame { border: 0; aspect-ratio: 16 / 9; height: auto; }
+
+.tab-return-recall {
+  position: absolute; left: 1rem; bottom: 1rem; z-index: 5;
+  max-width: min(25rem, calc(100% - 2rem)); padding: 0.8rem 1rem;
+  color: var(--text-primary); background: rgba(30, 41, 59, 0.94);
+  border: 1px solid var(--accent-blue); border-radius: 0.65rem;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+}
+.tab-return-recall p { margin: 0.25rem 0 0.5rem; }
+.tab-return-recall button { padding: 0.25rem 0.5rem; }
 
 /* Fullscreen support: video-wrapper is the fullscreen target so overlays remain interactive */
 .video-wrapper:fullscreen,
