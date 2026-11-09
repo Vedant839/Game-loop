@@ -9,8 +9,21 @@ from backend.main import app
 client = TestClient(app)
 
 
-def test_v03_lecture_detail_route_response_shape() -> None:
-    # This V0.3 full-lecture shape is expected to change when P0.4 sanitizes this route.
+def _assert_student_lecture_has_no_private_fields(value) -> None:
+    private = {
+        "correct_answer", "accepted_answers", "key_concepts", "reference_answer",
+        "misconceptions", "passing_score", "hints", "solution_code", "recall_pool",
+    }
+    if isinstance(value, dict):
+        assert not (private & value.keys())
+        for child in value.values():
+            _assert_student_lecture_has_no_private_fields(child)
+    elif isinstance(value, list):
+        for child in value:
+            _assert_student_lecture_has_no_private_fields(child)
+
+
+def test_public_lecture_route_returns_sanitized_response_shape() -> None:
     response = client.get("/api/lectures/linear_algebra_vectors")
 
     assert response.status_code == 200
@@ -18,6 +31,24 @@ def test_v03_lecture_detail_route_response_shape() -> None:
         "id", "title", "subject", "grade", "duration_seconds", "video_url",
         "timing_config", "transcript", "interventions",
     }
+    _assert_student_lecture_has_no_private_fields(response.json())
+
+
+def test_session_lecture_route_returns_sanitized_lecture() -> None:
+    created = client.post("/api/sessions", json={"lecture_id": "linear_algebra_vectors"})
+    assert created.status_code == 201
+
+    response = client.get(f"/api/sessions/{created.json()['session_id']}/lecture")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == "linear_algebra_vectors"
+    _assert_student_lecture_has_no_private_fields(response.json())
+
+
+def test_unknown_session_cannot_fetch_a_lecture() -> None:
+    response = client.get("/api/sessions/fabricated-session/lecture")
+
+    assert response.status_code == 404
 
 
 def test_v03_telemetry_route_response_shape(creator_token_factory) -> None:

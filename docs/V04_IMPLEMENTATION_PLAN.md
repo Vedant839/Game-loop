@@ -588,7 +588,7 @@ gcloud run deploy game-loop-api \
 - [x] **P0.3: Turso Driver Spike & Swap** — The `turso_serverless` DB-API spike verified remote access and concurrent writes. `GAME_LOOP_DATABASE_BACKEND=turso` selects the adapter; repository batches use DB-API `executemany`. Configure the Turso primary in the Cloud Run service region. Cloud Run same-region latency and remote rollback still require the Turso contract suite.
 - [x] **P0.4: Creator Auth & Quota Enforcement** — Implement `backend/auth.py`, `creator_tokens`, `scripts/create_token.py`, `scripts/revoke_token.py`. Implement monthly token cap check in `evaluator_service.py`. Gate V0.3 routes (`POST /api/lectures`, `GET /api/telemetry`, `GET /api/learners/{client_id}/{user_id}`).
 - [x] **P0.5: Anonymous Learner Identity** : Namespaced learner identity uses localStorage, falling back to sessionStorage and then an in-memory ID on storage exceptions. A visible notice explains progress is saved for the tab only.
-- **Exit Gate:** Current baseline passes (67 backend, 21 frontend), plus P0 repository contract and storage fallback tests. Reconfirm counts at the next sprint boundary.
+- **Exit Gate:** Current baseline passes (72 backend, 21 frontend), plus P0 repository contract and storage fallback tests. Reconfirm counts at the next sprint boundary.
 
 ### P1 — Ingestion & Video Adapters
 - [ ] **P1.1: IngestPage & Caption Parsers** — Implement `frontend/src/studio/IngestPage.tsx` (URL input, SRT/VTT file dropzone, browser-side audio upload with creator's key, intensity selector, progress bar) and `backend/utils/captions.py` (SRT/VTT parser).
@@ -608,7 +608,7 @@ gcloud run deploy game-loop-api \
 ### P3 — Creator Studio & Distribution
 - [ ] **P3.1: Studio Frontend & APIs** — Implement Course & Lecture CRUD, `POST .../preview_session` (isolated from profiles/telemetry), Checkpoint Inspector with time-ordered repositioning, delete button, and skip-policy selector.
 - [ ] **P3.2: Standalone Watch & Embed Generator** — Implement `/watch/:id`, embed code generator with fullscreen and sandbox attributes, WCAG contrast checking.
-- [ ] **P3.3: Student-Facing Lecture Sanitization & Hint Gating** — Implement `GET /api/sessions/{id}/lecture` stripping all answers, rubrics, hints, and recall pools. Implement `POST /api/sessions/{id}/hint` enforcing attempt gating.
+- [ ] **P3.3: Student-Facing Lecture Sanitization & Hint Gating** — Student and public lecture routes now strip answers, rubrics, hints, and recall pools; implement `POST /api/sessions/{id}/hint` with server-side attempt gating.
 - **Exit Gate:** Studio requires creator token. Preview sessions excluded from analytics. Answers stripped from student endpoint.
 
 ### P4 — Analytics, Ops & Verification
@@ -619,7 +619,7 @@ gcloud run deploy game-loop-api \
 - [ ] **P4.5: Deployment Verification** — Root Dockerfile with `${PORT:-8080}`, migration CLI, and Cloud Run script verification.
 - **Exit Gate:** All 53 acceptance criteria pass.
 
-> **Deployment hold:** Do not deploy this service publicly until P3.3 delivers and tests the sanitized student lecture endpoint. The unauthenticated `GET /api/lectures/{id}` currently returns full lecture answers.
+> **Deployment hold:** Do not deploy this service publicly until P3.3 delivers and tests hint gating and the complete student-response scan.
 
 ---
 
@@ -704,7 +704,7 @@ Statuses reflect the current implementation and latest local evidence. `NOT VERI
 
 | Criterion | Test name / evidence | Status |
 |---:|---|---|
-| 1 | Host full suites: backend 67 passed; frontend 21 passed | PASS |
+| 1 | Host full suites: backend 72 passed; frontend 21 passed | PASS |
 | 2 | Frontend Vitest suite: 21 passed | PASS |
 | 3 | Static SQL audit: SQL is confined to `backend/database.py` and `backend/repositories/` | PASS |
 | 4 | `test_v03_migration_is_guarded_and_idempotent` | PASS |
@@ -713,8 +713,8 @@ Statuses reflect the current implementation and latest local evidence. `NOT VERI
 | 7 | `test_repository_contract_concurrent_writes` on SQLite; Turso spike result is historical | PARTIAL |
 | 8 | `test_creator_routes_reject_missing_token` | PASS |
 | 9 | `test_creator_routes_reject_missing_token` covers gated legacy routes | PASS |
-| 10 | `test_v03_lecture_detail_route_response_shape` checks response shape, not answer sanitization | PARTIAL |
-| 11 | `test_creator_cannot_read_another_creators_telemetry_or_profile`; lecture isolation not covered | PARTIAL |
+| 10 | `test_public_lecture_route_returns_sanitized_response_shape`; `test_session_lecture_route_returns_sanitized_lecture` | PASS |
+| 11 | `test_creator_cannot_read_another_creators_telemetry_or_profile`; `test_studio_lecture_is_scoped_to_the_creating_creator`; other analytics isolation remains unverified | PARTIAL |
 | 12 | `test_revoked_creator_token_is_rejected` | PASS |
 | 13 | Static route scan found no `uid` query parameter | PASS |
 | 14 | No fake-session-id isolation test found | NOT IMPLEMENTED |
@@ -723,12 +723,12 @@ Statuses reflect the current implementation and latest local evidence. `NOT VERI
 | 17 | `test_simulated_gemini_failure_redacts_key_from_logs_and_response` | PASS |
 | 18 | No prompt-injection rubric-bounds test found | NOT IMPLEMENTED |
 | 19 | No score-correction monotonicity test found | NOT IMPLEMENTED |
-| 20 | No student lecture answer-stripping test found | NOT IMPLEMENTED |
+| 20 | `test_sanitizer_removes_nested_student_secrets_without_mutating_source`; public and session route sanitization tests | PASS |
 | 21 | No pre-attempt hint endpoint/test found | NOT IMPLEMENTED |
 | 22 | No ingestion duration instrumentation/test found | NOT IMPLEMENTED |
 | 23 | No SRT/VTT parser or parser tests found | NOT IMPLEMENTED |
 | 24 | No generated checkpoint mobile fallback/recall pool test found | NOT IMPLEMENTED |
-| 25 | Lecture database persistence/read path is not implemented | NOT IMPLEMENTED |
+| 25 | Creator lecture creation and Studio reads use the database; public/session reads still use lecture files | PARTIAL |
 | 26 | No checkpoint revision edit test found | NOT IMPLEMENTED |
 | 27 | Server-side flash recall without Gemini is not implemented | NOT IMPLEMENTED |
 | 28 | Flash recall Format B handling is not implemented | NOT IMPLEMENTED |

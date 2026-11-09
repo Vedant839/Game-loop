@@ -13,6 +13,7 @@ import math
 from backend.config import get_settings
 from backend.auth import require_creator
 from backend.database import DatabaseUnavailableError, get_database
+from backend.lecture_sanitizer import sanitize_student_lecture
 from backend.schemas.lecture import Lecture, LectureSummary, ResumptionPolicy
 from backend.schemas.session import (
     ActivateInterventionRequest,
@@ -90,6 +91,21 @@ def create_lecture(
             detail="Legacy lecture IDs are reserved; choose a custom lecture ID.",
         )
     service.save_lecture(lecture)
+    video_url = lecture.video_url.lower()
+    source_type = (
+        "youtube" if "youtube.com/" in video_url or "youtu.be/" in video_url
+        else "vimeo" if "vimeo.com/" in video_url
+        else "direct"
+    )
+    _creator_id = _creator["creator_id"]
+    get_database().lectures.save_lecture(
+        lecture_id=lecture.id,
+        creator_id=_creator_id,
+        title=lecture.title,
+        video_url=lecture.video_url,
+        source_type=source_type,
+        content_json=lecture.model_dump_json(),
+    )
     return lecture
 
 
@@ -100,11 +116,48 @@ def list_lectures() -> list[LectureSummary]:
     return service.list_lectures()
 
 
-@app.get("/api/lectures/{lecture_id}", response_model=Lecture)
-def get_lecture(lecture_id: str) -> Lecture:
-    """Retrieve full validated lecture definition by ID."""
+@app.get("/api/lectures/{lecture_id}")
+def get_lecture(lecture_id: str) -> dict[str, Any]:
+    """Return the student-safe lecture view by ID."""
     service = get_lecture_service()
     lecture = service.get_lecture(lecture_id)
+    if not lecture:
+        raise HTTPException(status_code=404, detail=f"Lecture '{lecture_id}' not found.")
+    return sanitize_student_lecture(lecture.model_dump(mode="json"))
+
+
+@app.get("/api/sessions/{session_id}/lecture")
+def get_session_lecture(session_id: str) -> dict[str, Any]:
+    """Return the sanitized lecture attached to a valid session capability."""
+    session_service = get_session_service()
+    try:
+        session = session_service._get_or_load_session(session_id)
+    except SessionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+    return sanitize_student_lecture(session.lecture.model_dump(mode="json"))
+
+
+@app.get("/api/studio/lectures/{lecture_id}", response_model=Lecture)
+@limiter.limit("120/minute", key_func=get_creator_rate_limit_key)
+def get_studio_lecture(
+    request: Request,
+    lecture_id: str,
+    creator: dict[str, str] = Depends(require_creator),
+) -> Lecture:
+    """Return the full lecture to an authenticated creator."""
+    stored = get_database().lectures.get_lecture(lecture_id)
+    if stored is not None:
+        if stored["creator_id"] != creator["creator_id"]:
+            raise HTTPException(status_code=404, detail=f"Lecture '{lecture_id}' not found.")
+        try:
+            return Lecture.model_validate_json(stored["content"])
+        except ValueError:
+            raise HTTPException(status_code=500, detail="Stored lecture is invalid") from None
+
+    # Bundled seed lectures belong to the canonical creator until backfilled.
+    if creator["creator_id"] != "default_client":
+        raise HTTPException(status_code=404, detail=f"Lecture '{lecture_id}' not found.")
+    lecture = get_lecture_service().get_lecture(lecture_id)
     if not lecture:
         raise HTTPException(status_code=404, detail=f"Lecture '{lecture_id}' not found.")
     return lecture

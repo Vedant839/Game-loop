@@ -18,6 +18,7 @@ client = TestClient(app)
 def test_creator_routes_reject_missing_token():
     assert client.get("/api/telemetry").status_code == 401
     assert client.get("/api/learners/default_client/learner").status_code == 401
+    assert client.get("/api/studio/lectures/linear_algebra_vectors").status_code == 401
     assert client.post("/api/lectures", json={}).status_code == 401
 
 
@@ -96,3 +97,41 @@ def test_first_creator_can_list_linux_lecture_and_its_sessions(creator_token_fac
     assert sessions.status_code == 200
     assert any(item["session_id"] == created.json()["session_id"] for item in sessions.json())
     assert all("external_user_id" not in item for item in sessions.json())
+
+
+def test_studio_lecture_route_preserves_full_answers(creator_token_factory):
+    header = creator_token_factory("default_client")
+
+    response = client.get(
+        "/api/studio/lectures/linux_command_line", headers=header
+    )
+
+    assert response.status_code == 200
+    assert any(
+        intervention.get("correct_answer") is not None
+        for intervention in response.json()["interventions"]
+    )
+
+
+def test_studio_lecture_is_scoped_to_the_creating_creator(creator_token_factory, monkeypatch):
+    from backend.services.lecture_service import get_lecture_service
+
+    creator_a = creator_token_factory("creator_a")
+    creator_b = creator_token_factory("creator_b")
+    lecture = get_lecture_service().get_lecture("linux_command_line")
+    assert lecture is not None
+    lecture.id = "creator_b_private_lecture"
+    monkeypatch.setattr(get_lecture_service(), "save_lecture", lambda _lecture: None)
+
+    created = client.post(
+        "/api/lectures", headers=creator_b, json=lecture.model_dump(mode="json")
+    )
+    assert created.status_code == 201
+
+    own = client.get("/api/studio/lectures/creator_b_private_lecture", headers=creator_b)
+    other = client.get("/api/studio/lectures/creator_b_private_lecture", headers=creator_a)
+
+    assert own.status_code == 200
+    assert any(item.get("correct_answer") for item in own.json()["interventions"])
+    assert other.status_code == 404
+    assert get_database().lectures.get_lecture("creator_b_private_lecture")["creator_id"] == "creator_b"
