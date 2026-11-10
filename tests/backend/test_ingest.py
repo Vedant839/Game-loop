@@ -18,9 +18,6 @@ def test_creator_ingest_parses_captions_and_persists_lecture(tmp_path, monkeypat
         "/api/creator/ingest",
         headers=token,
         json={
-            "title": "Vectors",
-            "subject": "Math",
-            "grade": "12",
             "video_url": "https://example.com/vectors.mp4",
             "duration_seconds": 300,
             "captions": "1\n00:00:01,000 --> 00:00:04,000\nA vector has magnitude and direction.",
@@ -31,6 +28,7 @@ def test_creator_ingest_parses_captions_and_persists_lecture(tmp_path, monkeypat
 
     assert response.status_code == 201
     lecture = response.json()
+    assert not {"title", "subject", "grade"}.intersection(lecture)
     assert lecture["transcript"][0]["text"] == "A vector has magnitude and direction."
     assert lecture["interventions"]
     assert service.get_lecture(lecture["id"]) is not None
@@ -44,13 +42,23 @@ def test_creator_ingest_rejects_bad_caption_file(creator_token_factory):
         "/api/creator/ingest",
         headers=creator_token_factory("ingest_creator"),
         json={
-            "title": "Bad captions",
-            "subject": "Math",
-            "grade": "12",
             "video_url": "https://example.com/video.mp4",
             "duration_seconds": 60,
             "captions": "not an SRT file",
             "captions_format": "srt",
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_creator_ingest_rejects_school_metadata_fields(creator_token_factory):
+    response = TestClient(app).post(
+        "/api/creator/ingest",
+        headers=creator_token_factory("ingest_creator"),
+        json={
+            "video_url": "https://example.com/video.mp4",
+            "duration_seconds": 300,
+            "title": "No longer part of the model",
         },
     )
     assert response.status_code == 422

@@ -4,7 +4,7 @@ import Player from "./Player";
 import type { Lecture, SessionState } from "./types";
 
 const lecture: Lecture = {
-  id: "tab-test", title: "Tab Test", subject: "Science", grade: "12",
+  id: "tab-test",
   duration_seconds: 300, video_url: "https://example.com/video.mp4",
   timing_config: { min_trigger_gap: 15, tolerance: 2 }, transcript: [], interventions: [],
 };

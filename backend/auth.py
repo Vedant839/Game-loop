@@ -27,3 +27,10 @@ def require_creator(authorization: str | None = Header(default=None)) -> dict[st
         raise HTTPException(status_code=401, detail="Invalid creator token")
     get_database().creators.touch_token(token_hash)
     return record
+
+
+def optional_creator(authorization: str | None = Header(default=None)) -> dict[str, str] | None:
+    """Validate a supplied creator token, while allowing anonymous callers."""
+    if authorization is None:
+        return None
+    return require_creator(authorization)

@@ -1,0 +1,173 @@
+{
+  "id": "you_wont_believe_how_simple_ml_actually_is",
+  "duration_seconds": 302.57916666666665,
+  "video_url": "/media/you_wont_believe_how_simple_ml_actually_is.mp4",
+  "timing_config": {
+    "min_trigger_gap": 15.0,
+    "tolerance": 2.0
+  },
+  "transcript": [
+    {
+      "start_time": 0.0,
+      "end_time": 4.007671081677704,
+      "text": "Everyone uses chat GPT, but nobody knows"
+    },
+    {
+      "start_time": 4.007671081677704,
+      "end_time": 7.013424392935982,
+      "text": "how it actually works and that's why most"
+    },
+    {
+      "start_time": 7.013424392935982,
+      "end_time": 12.023013245033113,
+      "text": "people get confused, scared or think it's magic."
+    },
+    {
+      "start_time": 12.023013245033113,
+      "end_time": 16.030684326710816,
+      "text": "So today, I'll explain how LMS think in"
+    },
+    {
+      "start_time": 16.030684326710816,
+      "end_time": 20.03835540838852,
+      "text": "clean normal English, so you finally stop feeling lost."
+    },
+    {
+      "start_time": 20.03835540838852,
+      "end_time": 27.0517798013245,
+      "text": "So, most people think that indeed PhD to understand large language models,"
+    },
+    {
+      "start_time": 27.0517798013245,
+      "end_time": 34.06520419426048,
+      "text": "I started with literally one question that what is an LLM and somehow curiosity"
+    },
+    {
+      "start_time": 34.06520419426048,
+      "end_time": 41.07862858719646,
+      "text": "hold me into a rabbit hole, training, probabilities, predictions and transformers and all that."
+    },
+    {
+      "start_time": 41.07862858719646,
+      "end_time": 57.10931291390728,
+      "text": "So let me show it you the exact path I followed and uh yeah."
+    },
+    {
+      "start_time": 57.10931291390728,
+      "end_time": 63.12081953642384,
+      "text": "And LLM is basically a gigantic pattern recognition machine."
+    },
+    {
+      "start_time": 63.12081953642384,
+      "end_time": 68.13040838852096,
+      "text": "It doesn't understand like a human, it predicts text based on what it has seen."
+    },
+    {
+      "start_time": 68.13040838852096,
+      "end_time": 76.14575055187638,
+      "text": "That's where my journey started realizing it's all just math pretending to be intelligence."
+    },
+    {
+      "start_time": 76.14575055187638,
+      "end_time": 80.15342163355407,
+      "text": "So let me show you how."
+    },
+    {
+      "start_time": 80.15342163355407,
+      "end_time": 92.17643487858719,
+      "text": "So, we mostly have a text so, for example, let's say we gave it some data."
+    },
+    {
+      "start_time": 92.17643487858719,
+      "end_time": 100.1917770419426,
+      "text": "Let's say some text and then our LLM is supposed to find patterns in our text"
+    },
+    {
+      "start_time": 100.1917770419426,
+      "end_time": 107.20520143487857,
+      "text": "and then it has to predict the next word based on probability."
+    },
+    {
+      "start_time": 107.20520143487857,
+      "end_time": 117.22437913907284,
+      "text": "70%, 20% or 10%. So let's say Mary is a blank"
+    },
+    {
+      "start_time": 117.22437913907284,
+      "end_time": 128.24547461368653,
+      "text": "And then in our dictionary we have three words, lady, girl and"
+    },
+    {
+      "start_time": 128.24547461368653,
+      "end_time": 140.26848785871962,
+      "text": "whatever woman and then let's say lady has 40%, women has 30% and girl has 50%."
+    },
+    {
+      "start_time": 140.26848785871962,
+      "end_time": 151.28958333333333,
+      "text": "So that is how it's supposed to work and this is mostly what an LLM is."
+    },
+    {
+      "start_time": 151.28958333333333,
+      "end_time": 158.3030077262693,
+      "text": "So let me just show you more further. When I first learned"
+    },
+    {
+      "start_time": 158.3030077262693,
+      "end_time": 172.32985651214128,
+      "text": "how models are trained, it just clicked when you feed the model absurd amounts of data and it tries to guess the next token."
+    },
+    {
+      "start_time": 172.32985651214128,
+      "end_time": 184.35286975717437,
+      "text": "It guesses wrong and then you corrected and you repeat that millions or billions of times."
+    },
+    {
+      "start_time": 184.35286975717437,
+      "end_time": 210.40273178807945,
+      "text": "So, training is basically punishment reward loop. Yeah and that is how it always work and it is called gradient descent."
+    },
+    {
+      "start_time": 210.40273178807945,
+      "end_time": 235.4506760485651,
+      "text": "So what happens is we take in, I mean we give an input and then it makes a prediction and then it causes error then it updates"
+    },
+    {
+      "start_time": 235.4506760485651,
+      "end_time": 248.47560706401765,
+      "text": "and then we given an input again then it makes a prediction again and then an error again and then update again."
+    },
+    {
+      "start_time": 248.47560706401765,
+      "end_time": 258.4947847682119,
+      "text": "And that is how the whole loop works. So this whole thing is called"
+    },
+    {
+      "start_time": 258.4947847682119,
+      "end_time": 270.517798013245,
+      "text": "gradient descent and it is mostly used to minimize loss of our data in the during the training"
+    },
+    {
+      "start_time": 270.517798013245,
+      "end_time": 277.531222406181,
+      "text": "of our ML model. So, this is basically it from it and it's not that"
+    },
+    {
+      "start_time": 277.531222406181,
+      "end_time": 286.54848233995585,
+      "text": "complex that you won't understand and stuff. So yeah, that was basically it."
+    },
+    {
+      "start_time": 286.54848233995585,
+      "end_time": 296.5676600441501,
+      "text": "So at some point I realized the real power of LLMs is probability. So every output the model gives"
+    },
+    {
+      "start_time": 296.5676600441501,
+      "end_time": 302.57916666666665,
+      "text": "whether every word, every sentence"
+    }
+  ],
+  "interventions": [],
+  "recall_pool": []
+}

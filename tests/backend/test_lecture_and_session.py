@@ -19,13 +19,19 @@ def test_timing_config_invariant_rejects_invalid_values() -> None:
         TimingConfig(min_trigger_gap=10.0, tolerance=5.0)
 
 
-def test_api_only_lists_linear_algebra_and_custom_lectures() -> None:
+def test_api_lists_the_sample_lecture_first() -> None:
     res = client.get("/api/lectures")
     assert res.status_code == 200
     lecture_ids = [item["id"] for item in res.json()]
-    assert "linear_algebra_vectors" in lecture_ids
-    assert "math_sample_lecture" not in lecture_ids
+    assert lecture_ids[0] == "math_sample_lecture"
+    assert "math_sample_lecture" in lecture_ids
+    assert len(lecture_ids) == 6
+    assert "linear_algebra_vectors" not in lecture_ids
+    assert "linux_command_line" not in lecture_ids
     assert "physics_kinematics" not in lecture_ids
+    assert "python_basics_lists" not in lecture_ids
+    assert client.get("/api/lectures/linear_algebra_vectors").status_code == 404
+    assert client.get("/api/lectures/linux_command_line").status_code == 404
 
 
 def test_lecture_service_loads_canonical_sample_lecture() -> None:
@@ -38,9 +44,34 @@ def test_lecture_service_loads_canonical_sample_lecture() -> None:
     assert lecture.interventions[2].type.value == "multiple_selection"
 
 
+def test_anonymous_sample_generation_uses_local_fallback(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "backend.main.settings",
+        types.SimpleNamespace(gemini_api_key=types.SimpleNamespace(get_secret_value=lambda: "configured-key")),
+    )
+    monkeypatch.setattr(
+        "backend.main.generate_interventions_with_gemini",
+        lambda **_kwargs: pytest.fail("anonymous sample generation must not call Gemini"),
+    )
+
+    response = client.post("/api/lectures/math_sample_lecture/generate_interventions")
+
+    assert response.status_code == 200
+    assert response.json()["interventions"]
+
+
+def test_anonymous_imported_sample_generation_is_allowed() -> None:
+    response = client.post(
+        "/api/lectures/python_tutorial_for_beginners_pip_comments_types_basic_operations_pylenza_1/generate_interventions"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["id"].startswith("python_tutorial_for_beginners")
+
+
 def test_generate_interventions_refreshes_runtime_lecture_without_old_interventions(monkeypatch) -> None:
     lecture_service = get_lecture_service()
-    stale_lecture = lecture_service.get_lecture("linear_algebra_vectors")
+    stale_lecture = lecture_service.get_lecture("math_sample_lecture")
     assert stale_lecture is not None
     stale_lecture = stale_lecture.model_copy(
         update={
@@ -121,14 +152,14 @@ def test_generate_interventions_refreshes_runtime_lecture_without_old_interventi
         request=Request({
             "type": "http",
             "method": "POST",
-            "path": "/api/lectures/linear_algebra_vectors/generate_interventions",
+            "path": "/api/lectures/math_sample_lecture/generate_interventions",
             "headers": [],
             "client": ("testclient", 1234),
             "server": ("testserver", 80),
             "scheme": "http",
             "query_string": b"",
         }),
-        lecture_id="linear_algebra_vectors",
+        lecture_id="math_sample_lecture",
         creator={"creator_id": "test_creator"},
     )
 
@@ -201,9 +232,9 @@ def test_session_lifecycle_and_state_transitions() -> None:
 
 def test_session_uses_runtime_generated_lecture_without_persisting() -> None:
     lecture_service = LectureService()
-    base_lecture = lecture_service.get_lecture("linear_algebra_vectors")
+    base_lecture = lecture_service.get_lecture("math_sample_lecture")
     assert base_lecture is not None
-    assert base_lecture.interventions == []
+    original_intervention_ids = [intervention.id for intervention in base_lecture.interventions]
 
     runtime_intervention = Intervention(
         id="runtime_int_1",
@@ -230,12 +261,12 @@ def test_session_uses_runtime_generated_lecture_without_persisting() -> None:
     lecture_service.set_runtime_lecture(generated_lecture)
     session_service = SessionService(lecture_service=lecture_service)
 
-    session_state = session_service.create_session("linear_algebra_vectors")
+    session_state = session_service.create_session("math_sample_lecture")
 
     assert [i.id for i in session_state.interventions] == ["runtime_int_1"]
-    reloaded_from_disk = LectureService().get_lecture("linear_algebra_vectors")
+    reloaded_from_disk = LectureService().get_lecture("math_sample_lecture")
     assert reloaded_from_disk is not None
-    assert reloaded_from_disk.interventions == []
+    assert [intervention.id for intervention in reloaded_from_disk.interventions] == original_intervention_ids
 
 
 def test_forward_seek_bypasses_pending_interventions() -> None:

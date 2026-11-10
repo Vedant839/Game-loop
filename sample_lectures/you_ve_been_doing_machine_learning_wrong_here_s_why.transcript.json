@@ -1,0 +1,40 @@
+{
+  "duration_seconds": 177.30755208333332,
+  "segments": [
+    {
+      "start_seconds": 0.0,
+      "end_seconds": 8.623908175259402,
+      "text": "Why Mathematics in Machine Learning? You might think that you can just copy code and use libraries."
+    },
+    {
+      "start_seconds": 8.623908175259402,
+      "end_seconds": 17.247816350518804,
+      "text": "But if you really want to understand, improve, and create models that reliably work, math is your secret weapon."
+    },
+    {
+      "start_seconds": 17.247816350518804,
+      "end_seconds": 39.66997760619325,
+      "text": "Mathematics helps us understand how machine learning models learn patterns from data and make predictions. Linear algebra allows us to represent data as vectors and matrices, calculus shows how models adjust their parameters to minimize errors, and probability helps quantify uncertainty and make informed predictions rather than guesses. Without math, these algorithms remain black boxes, but with it, we can truly reason about how they work."
+    },
+    {
+      "start_seconds": 39.66997760619325,
+      "end_seconds": 85.54916909857327,
+      "text": "Math is crucial when models don't work as expected. By analyzing cost functions, gradients, and statistical patterns, we can identify why predictions fail, adjust parameters, and systematically improve performance. Instead of guessing, math gives us the tools to optimize models efficiently and make them more accurate and reliable."
+    },
+    {
+      "start_seconds": 85.54916909857327,
+      "end_seconds": 106.24654871919584,
+      "text": "Mathematics empowers you to go beyond simply using existing machine learning models. By understanding the underlying formulas and principles, you can design new architectures, create custom algorithms, and optimize existing models for better performance. This mathematical foundation enables true innovation, allowing you to solve unique problems and push the boundaries of what machine learning can achieve."
+    },
+    {
+      "start_seconds": 106.24654871919584,
+      "end_seconds": 155.92025980869,
+      "text": "Math is used in machine learning in many ways. Linear algebra handles data representation, calculus drives learning through optimization, probability and statistics guide predictions and uncertainty, and logic or discrete math underlies algorithms and decision-making. Together, these areas form the foundation that powers every ML model, from simple regressions to complex neural networks."
+    },
+    {
+      "start_seconds": 155.92025980869,
+      "end_seconds": 177.30755208333332,
+      "text": "If you ever felt that machine learning looks like magic or black box code, that's not a talent problem; it's a math gap. In this series, we're going to close that gap step-by-step with real intuition, real examples, and no hand-waving. If you actually want to understand ML instead of memorizing libraries, subscribe and stay with me; the next video is where the real work begins."
+    }
+  ]
+}

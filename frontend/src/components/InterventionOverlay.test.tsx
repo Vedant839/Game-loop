@@ -115,7 +115,7 @@ describe("InterventionOverlay", () => {
       },
       session_state: {
         session_id: "sess_inq",
-        lecture_id: "python_basics_lists",
+        lecture_id: "math_sample_lecture",
         version: 2,
         active_intervention_id: "py_1",
         interventions: [{ id: "py_1", trigger_time: 65.0, state: "ACTIVE" }],
@@ -129,7 +129,7 @@ describe("InterventionOverlay", () => {
       submitted_answer: "h_b",
       session_state: {
         session_id: "sess_inq",
-        lecture_id: "python_basics_lists",
+        lecture_id: "math_sample_lecture",
         version: 3,
         active_intervention_id: null,
         interventions: [{ id: "py_1", trigger_time: 65.0, state: "COMPLETED" }],

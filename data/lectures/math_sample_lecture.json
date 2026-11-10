@@ -1,9 +1,6 @@
 {
   "id": "math_sample_lecture",
-  "title": "Grade 9 Mathematics - Linear Equations",
-  "subject": "Mathematics",
-  "grade": "Grade 9",
-  "duration_seconds": 300.0,
+  "duration_seconds": 979.3479817708334,
   "video_url": "/media/math_sample_lecture.mp4",
   "timing_config": {
     "min_trigger_gap": 15.0,
@@ -12,113 +9,740 @@
   "transcript": [
     {
       "start_time": 0.0,
-      "end_time": 20.0,
-      "text": "Welcome to Grade 9 Mathematics. Today we explore linear equations in two variables. A linear equation can be written in slope-intercept form: y = mx + b, where m is the slope and b is the y-intercept."
+      "end_time": 6.362384819504311,
+      "text": "Welcome to Linear Algebra. Not just a world of symbols, but a playground of geometry, movement, and transformation."
     },
     {
-      "start_time": 20.0,
-      "end_time": 50.0,
-      "text": "The slope m tells you how steep the line is. For every 1 unit you move right along the x-axis, y changes by m units. A positive slope means the line goes up; negative slope means it goes down."
+      "start_time": 6.362384819504311,
+      "end_time": 11.427977828663796,
+      "text": "Grab a pen and paper. This isn't passive watching. You'll need them to solve problems yourself."
     },
     {
-      "start_time": 50.0,
-      "end_time": 90.0,
-      "text": "Let us look at the equation y = 2x + 3. Here the slope is 2 and the y-intercept is 3. When x is 0, y equals 3. When x is 1, y equals 5. When x is 2, y equals 7."
+      "start_time": 11.427977828663796,
+      "end_time": 19.978698828125,
+      "text": "Think of vectors flying through space, matrices reshaping entire coordinate systems. Linear Algebra is the language of geometry, and today, you begin decoding it."
     },
     {
-      "start_time": 90.0,
-      "end_time": 130.0,
-      "text": "Now consider solving linear equations. To solve 2x + 4 = 10, subtract 4 from both sides to get 2x = 6, then divide both sides by 2 to get x = 3. The key principle is that whatever you do to one side, you must do to the other."
+      "start_time": 19.978698828125,
+      "end_time": 28.205221875000003,
+      "text": "So, before we dive deeper, let's take a quick breath with some math humor. A new study revealed that um, 4 out of 3 people struggle with mathematics. Wait, what?"
     },
     {
-      "start_time": 130.0,
-      "end_time": 170.0,
-      "text": "Standard form of a linear equation is Ax + By = C. For example, 3x + 2y = 12. You can convert to slope-intercept form by solving for y: 2y = 12 - 3x, then y = 6 - (3/2)x. The slope is -3/2 and the y-intercept is 6."
+      "start_time": 28.205221875000003,
+      "end_time": 36.229121201508626,
+      "text": "That's right, 4 out of 3. If you're one of those four, don't worry, we're here to fix that. And if you spotted the error instantly, congrats! You're already thinking like a mathematician."
     },
     {
-      "start_time": 170.0,
-      "end_time": 210.0,
-      "text": "When two linear equations share the same solution, they intersect at a single point. This is called a system of equations. You can solve it by substitution: substitute one equation into the other to find the intersection."
+      "start_time": 36.229121201508626,
+      "end_time": 39.67372444773707,
+      "text": "Let's start with the simplest building block: scalars."
     },
     {
-      "start_time": 210.0,
-      "end_time": 260.0,
-      "text": "Let us solve the system: y = x + 1 and y = 2x - 3. Set them equal: x + 1 = 2x - 3. Subtract x from both sides: 1 = x - 3. Add 3: x = 4. Then y = 4 + 1 = 5. The solution is (4, 5)."
+      "start_time": 39.67372444773707,
+      "end_time": 72.0529949622845,
+      "text": "A scalar is a number that only has a size or magnitude. It tells you how much, but not where."
     },
     {
-      "start_time": 260.0,
-      "end_time": 300.0,
-      "text": "In summary, linear equations model real-world relationships with constant rates of change. The slope represents the rate of change, and the y-intercept represents the initial value. Mastering these ideas is foundational for all future algebra."
+      "start_time": 72.0529949622845,
+      "end_time": 77.74672150457975,
+      "text": "So, scalars are just pure values: no arrows, no angles, no orientation, just numbers that scale things."
+    },
+    {
+      "start_time": 77.74672150457975,
+      "end_time": 86.45954148033405,
+      "text": "For example, we have temperatures like 30°, it's hot, but it's not pointing anywhere. And like the weight, 50 kg, it's heavy, but it's also directionless."
+    },
+    {
+      "start_time": 86.45954148033405,
+      "end_time": 90.63359011988148,
+      "text": "Now, the speed, 60 km, which is really fast, but without a heading."
+    },
+    {
+      "start_time": 90.63359011988148,
+      "end_time": 98.94116265490304,
+      "text": "You're solving math problems like a champ, and then it hits you: you have 34 watermelons. Not 3, not 4, but 34."
+    },
+    {
+      "start_time": 98.94116265490304,
+      "end_time": 104.41200310479528,
+      "text": "Suddenly, you're a royalty, the watermelon emperor sitting on a throne of fruit you never asked for."
+    },
+    {
+      "start_time": 104.41200310479528,
+      "end_time": 136.28471431842675,
+      "text": "So, back to business. In linear algebra, we move from scalars, just numbers, to vectors."
+    },
+    {
+      "start_time": 136.28471431842675,
+      "end_time": 143.72100485587285,
+      "text": "So, a vector is a list of numbers that represent something with magnitude and direction. Think of it like magnitude tells you how much, and direction tells you which way."
+    },
+    {
+      "start_time": 143.72100485587285,
+      "end_time": 147.9558406115302,
+      "text": "For example, we have a vector [4, 2]."
+    },
+    {
+      "start_time": 147.9558406115302,
+      "end_time": 157.256269376347,
+      "text": "So, 4 we can imagine as x, and 2 as y. So, we go 4 units right and 2 units up. That's just the concept right here."
+    },
+    {
+      "start_time": 157.256269376347,
+      "end_time": 165.19911921470907,
+      "text": "Every vector can be broken down into components: horizontal and vertical. These are the x and y parts that make up the whole."
+    },
+    {
+      "start_time": 165.19911921470907,
+      "end_time": 174.90479542025864,
+      "text": "If you know the vector's magnitude and direction, you can calculate its components. So, Vx is = V * cos(θ) and Vy = V * sin(θ)."
+    },
+    {
+      "start_time": 174.90479542025864,
+      "end_time": 210.22210988011855,
+      "text": "So, the formula of cos(θ) is adjacent / hypotenuse, and the formula of sin(θ) is opposite / hypotenuse. That's basically it for this."
+    },
+    {
+      "start_time": 210.22210988011855,
+      "end_time": 218.06364785829746,
+      "text": "So, let's break a vector into parts. Say we have a vector with magnitude 10 and angle θ = 40°."
+    },
+    {
+      "start_time": 218.06364785829746,
+      "end_time": 223.57501305226293,
+      "text": "We want to find how much of it pointing horizontally or x and vertically or y."
+    },
+    {
+      "start_time": 223.57501305226293,
+      "end_time": 230.5452690328664,
+      "text": "Here's how: Vx = 10 * cos(θ) is the formula,"
+    },
+    {
+      "start_time": 230.5452690328664,
+      "end_time": 237.6978863617996,
+      "text": "and for Vy, it is Vy = 10 * sin(θ). And that is the formula."
+    },
+    {
+      "start_time": 237.6978863617996,
+      "end_time": 275.52773495420263,
+      "text": "All right here. And if we do the sum, approximately Vx should be = 7.07, and Vy should be = 6.42."
+    },
+    {
+      "start_time": 275.52773495420263,
+      "end_time": 280.14755577855607,
+      "text": "And what if you already know the components and want to find the angle or the magnitude?"
+    },
+    {
+      "start_time": 280.14755577855607,
+      "end_time": 293.0344243938578,
+      "text": "So, you can find the magnitude using V, which is equal to the square root, then Vx, or our x component, square plus y square, the y component."
+    },
+    {
+      "start_time": 293.0344243938578,
+      "end_time": 303.06429855199355,
+      "text": "And now we know what our x and y are, so we put the square root, then 7.07 squared plus 6.42 squared, which is approximately = 9.54."
+    },
+    {
+      "start_time": 303.06429855199355,
+      "end_time": 308.5351390018858,
+      "text": "And after all that trigonometry, let's check in with your emotional state. You're in deep math problem solving for x and y,"
+    },
+    {
+      "start_time": 308.5351390018858,
+      "end_time": 342.25172607085136,
+      "text": "finding angles, calculating magnitudes, and then you see, \"If math could grow up and solve its own problems, that'd be great.\" And honestly, same."
+    },
+    {
+      "start_time": 342.25172607085136,
+      "end_time": 348.75594749461214,
+      "text": "Math is the only subject where your problems become its problems, and you still don't get paid for solving them."
+    },
+    {
+      "start_time": 348.75594749461214,
+      "end_time": 355.5641044989225,
+      "text": "So, let's start with a challenge. Draw a vector of magnitude 5 at an angle of 45°."
+    },
+    {
+      "start_time": 355.5641044989225,
+      "end_time": 362.3317367591595,
+      "text": "Your task is to find its x and y components. This is your first step into vector decomposition, where geometry meets algebra."
+    },
+    {
+      "start_time": 362.3317367591595,
+      "end_time": 369.72750255253237,
+      "text": "So, good luck solving, and make sure don't cheat for solutions because you'll practice, and if you can't solve, then I will give you the solutions."
+    },
+    {
+      "start_time": 369.72750255253237,
+      "end_time": 373.33420477505393,
+      "text": "So, just try for now."
+    },
+    {
+      "start_time": 373.33420477505393,
+      "end_time": 406.40239593884706,
+      "text": "And uh you are allowed to pause the video, so you can take as much time as possible, and yeah."
+    },
+    {
+      "start_time": 406.40239593884706,
+      "end_time": 410.657494066541,
+      "text": "So, here's how to solve it. So, our magnitude is 5, and θ is 45°."
+    },
+    {
+      "start_time": 410.657494066541,
+      "end_time": 418.1140469760237,
+      "text": "So, Vx should be = 5 * cos(θ), which is approximately = 3.53."
+    },
+    {
+      "start_time": 418.1140469760237,
+      "end_time": 422.51098170797417,
+      "text": "And Vy should be = 5 * sin(θ)."
+    },
+    {
+      "start_time": 422.51098170797417,
+      "end_time": 430.73750475484917,
+      "text": "And it should be approximately = 3.53 as well, since 45° splits the vector evenly, so both the components are equal."
+    },
+    {
+      "start_time": 430.73750475484917,
+      "end_time": 435.2965384630927,
+      "text": "So, you've just built a symmetrical triangle: clean, elegant, and powerful."
+    },
+    {
+      "start_time": 435.2965384630927,
+      "end_time": 437.5253993871229,
+      "text": "Now let's move on to vector operations."
+    },
+    {
+      "start_time": 437.5253993871229,
+      "end_time": 443.279913045528,
+      "text": "So, vectors aren't just arrows, they're tools. We use operations to combine and manipulate them meaningfully."
+    },
+    {
+      "start_time": 443.279913045528,
+      "end_time": 475.41603509563583,
+      "text": "The three core actions are addition, subtraction, and scalar multiplication."
+    },
+    {
+      "start_time": 475.41603509563583,
+      "end_time": 479.32667289870693,
+      "text": "So, first of all, addition. Combine effects like motion or force."
+    },
+    {
+      "start_time": 479.32667289870693,
+      "end_time": 483.1562612136315,
+      "text": "And subtraction: find differences or displacements."
+    },
+    {
+      "start_time": 483.1562612136315,
+      "end_time": 486.3982407394936,
+      "text": "Then scalar multiplication: stretch or shrink a vector."
+    },
+    {
+      "start_time": 486.3982407394936,
+      "end_time": 490.93701207570047,
+      "text": "So, these operations are the grammar of the vector language, and you're learning to speak it."
+    },
+    {
+      "start_time": 490.93701207570047,
+      "end_time": 499.0622232623923,
+      "text": "And now, you're deep in math vector: trigonometric functions, components, operations, and then you try to do it without a calculator."
+    },
+    {
+      "start_time": 499.0622232623923,
+      "end_time": 510.77387429956906,
+      "text": "So, trying to do it without a calculator is like really hard. You press your temples like a telepath, hoping sine or cosine will whisper the answers. Math, the only subject where brain becomes the hardware."
+    },
+    {
+      "start_time": 510.77387429956906,
+      "end_time": 540.8229720299031,
+      "text": "Anyways, let's begin with the geometric view of addition."
+    },
+    {
+      "start_time": 540.8229720299031,
+      "end_time": 548.6442476360453,
+      "text": "Vector addition uses tail-tip method, or tip-to-tail method. So, place the tail of B at the tip of B. No, no, no."
+    },
+    {
+      "start_time": 548.6442476360453,
+      "end_time": 559.6467156519398,
+      "text": "Place the tail of B at the tip of A. The arrow from A's start to the B's end is the resultant. This shows the total effect of both vectors acting together, combining forces or steps."
+    },
+    {
+      "start_time": 559.6467156519398,
+      "end_time": 566.6777587486531,
+      "text": "And remember, vector addition is commutative: A + B = B + A. The order doesn't matter."
+    },
+    {
+      "start_time": 566.6777587486531,
+      "end_time": 570.547871807651,
+      "text": "Anyways, algebraic addition is simpler."
+    },
+    {
+      "start_time": 570.547871807651,
+      "end_time": 575.5324153286639,
+      "text": "So, we add components by the component: x with x, y with y."
+    },
+    {
+      "start_time": 575.5324153286639,
+      "end_time": 609.0666410492996,
+      "text": "Example: A = [3, -4], 3 and -4, and B = [1, 2], 1 and 2."
+    },
+    {
+      "start_time": 609.0666410492996,
+      "end_time": 617.6376244207975,
+      "text": "So, if we combine A + B, (3 + 1), and (-2 uh oh no), (-4 + 2), which should be = [4, -2], 4 and -2."
+    },
+    {
+      "start_time": 617.6376244207975,
+      "end_time": 623.8379102640087,
+      "text": "So, the components already encode the direction, so adding them directly gives the resultant vector."
+    },
+    {
+      "start_time": 623.8379102640087,
+      "end_time": 629.5924239224139,
+      "text": "So, vector subtraction now describes how to remove one vector from another."
+    },
+    {
+      "start_time": 629.5924239224139,
+      "end_time": 644.4852673693428,
+      "text": "Algebraically, we subtract component by component: Ax - Bx and Ay - By. So, we have Ax and Ay, and from B, we have Bx and By, and we just do the subtraction directly."
+    },
+    {
+      "start_time": 644.4852673693428,
+      "end_time": 681.909868521013,
+      "text": "So, this gives the horizontal and vertical differences, the correction needed to go from B to A. It's the difference vector that shows displacement, error, or change."
+    },
+    {
+      "start_time": 681.909868521013,
+      "end_time": 687.0970357623922,
+      "text": "Now, geometrically, subtraction is the arrow from B's tip to A's tip."
+    },
+    {
+      "start_time": 687.0970357623922,
+      "end_time": 692.4463019800647,
+      "text": "Let's solve it with an example. So, plot A is = [2, 4], 2 and 4,"
+    },
+    {
+      "start_time": 692.4463019800647,
+      "end_time": 696.7014001077587,
+      "text": "and plot B is [3, 4], 3 and 4, on the grid."
+    },
+    {
+      "start_time": 696.7014001077587,
+      "end_time": 700.7336121430496,
+      "text": "Draw a vector from the origin to 2 and 4,"
+    },
+    {
+      "start_time": 700.7336121430496,
+      "end_time": 704.8671360385238,
+      "text": "and then draw a vector B from the origin 3 and 5."
+    },
+    {
+      "start_time": 704.8671360385238,
+      "end_time": 710.1556151400863,
+      "text": "Now connect the B's tip to A's tip, and that arrow is A - B."
+    },
+    {
+      "start_time": 710.1556151400863,
+      "end_time": 714.6335993601832,
+      "text": "Its coordinates are [-1, -1], -1 and -1, exactly what we found algebraically."
+    },
+    {
+      "start_time": 714.6335993601832,
+      "end_time": 718.1795144665949,
+      "text": "It points down and left. I mean, left and down, whatever."
+    },
+    {
+      "start_time": 718.1795144665949,
+      "end_time": 722.090152269666,
+      "text": "So, geometric connection from B to A is the thing."
+    },
+    {
+      "start_time": 722.090152269666,
+      "end_time": 724.2447178295619,
+      "text": "So, yeah."
+    },
+    {
+      "start_time": 724.2447178295619,
+      "end_time": 729.9181819998205,
+      "text": "Now, you've drawn vectors, split them into components, and added them and subtracted them,"
+    },
+    {
+      "start_time": 729.9181819998205,
+      "end_time": 737.8002447220725,
+      "text": "and then it clicks. That moment in math class when everything suddenly makes sense, you just feel unstoppable."
+    },
+    {
+      "start_time": 737.8002447220725,
+      "end_time": 741.8324567573635,
+      "text": "You feel like this: \"I am the smartest man alive!\""
+    },
+    {
+      "start_time": 741.8324567573635,
+      "end_time": 755.1245728133981,
+      "text": "Celebrate the moment because math clarity is the victory. Time for another challenge. Add the vectors [3, 4], 3 and 4,"
+    },
+    {
+      "start_time": 755.1245728133981,
+      "end_time": 762.2164030262213,
+      "text": "and [-2, 5], -2 and 5. This is pure component-wise addition: x with x, y with y."
+    },
+    {
+      "start_time": 762.2164030262213,
+      "end_time": 768.5787878457257,
+      "text": "Let's see what happens when we combine motion in different directions."
+    },
+    {
+      "start_time": 768.5787878457257,
+      "end_time": 772.7933612293464,
+      "text": "So, yeah, you can pause the video if you want,"
+    },
+    {
+      "start_time": 772.7933612293464,
+      "end_time": 778.8923352123744,
+      "text": "and take as much time as possible because I'm just about to bring the solution."
+    },
+    {
+      "start_time": 778.8923352123744,
+      "end_time": 785.3155071479886,
+      "text": "Here's how we solve it: A is = [3, 4], 3 and 4,"
+    },
+    {
+      "start_time": 785.3155071479886,
+      "end_time": 789.550342903646,
+      "text": "B is = [-2, 5], -2 and 5."
+    },
+    {
+      "start_time": 789.550342903646,
+      "end_time": 794.0891142398528,
+      "text": "So, if you combine those, A + B, then it should be = (3 + -2)"
+    },
+    {
+      "start_time": 794.0891142398528,
+      "end_time": 798.5063113438399,
+      "text": "and (4 + 5), and it should be = [1, 9], 1 and 9."
+    },
+    {
+      "start_time": 798.5063113438399,
+      "end_time": 805.1726317438937,
+      "text": "So, the result is a new vector pointing 1 unit right and 9 units up."
+    },
+    {
+      "start_time": 805.1726317438937,
+      "end_time": 808.0904133171697,
+      "text": "That's total effect of both vectors acting together."
+    },
+    {
+      "start_time": 808.0904133171697,
+      "end_time": 813.946238835758,
+      "text": "Now, about scalar multiplication. Now, let's scale a vector."
+    },
+    {
+      "start_time": 813.946238835758,
+      "end_time": 817.5934658023529,
+      "text": "So, scalar multiplication means multiplying a vector by a number."
+    },
+    {
+      "start_time": 817.5934658023529,
+      "end_time": 822.9224696479887,
+      "text": "If Vx, meaning V is = [x, y], x and y,"
+    },
+    {
+      "start_time": 822.9224696479887,
+      "end_time": 826.8938945671696,
+      "text": "then k ∈ ℝ,"
+    },
+    {
+      "start_time": 826.8938945671696,
+      "end_time": 830.8450571143142,
+      "text": "then kV, or k multiplied by V, should be kx and ky,"
+    },
+    {
+      "start_time": 830.8450571143142,
+      "end_time": 834.0667742681395,
+      "text": "meaning k multiplied with x and k multiplied with y."
+    },
+    {
+      "start_time": 834.0667742681395,
+      "end_time": 839.9631245308012,
+      "text": "This stretches or shrinks the vector. If k is greater than 0, then it remains the same direction."
+    },
+    {
+      "start_time": 839.9631245308012,
+      "end_time": 844.5424206110813,
+      "text": "If k is less than less than 0, then direction flipped."
+    },
+    {
+      "start_time": 844.5424206110813,
+      "end_time": 848.6151573904456,
+      "text": "And if k is = 0, then collapse to the origin."
+    },
+    {
+      "start_time": 848.6151573904456,
+      "end_time": 857.429289226383,
+      "text": "For example, k = 3, A is = [3, 5], 3 and 5, then kA = 9 and 15, not 5."
+    },
+    {
+      "start_time": 857.429289226383,
+      "end_time": 861.90727344648,
+      "text": "You've just scaled a vector by a factor of 3."
+    },
+    {
+      "start_time": 861.90727344648,
+      "end_time": 870.9240290027839,
+      "text": "Now, you're solving a math problem, and the whole class is debating whether the answer is 17 or 18, and you got 157."
+    },
+    {
+      "start_time": 870.9240290027839,
+      "end_time": 876.6177555450791,
+      "text": "That's when you realize you didn't just miss the mark, you launched into another dimension."
+    },
+    {
+      "start_time": 876.6177555450791,
+      "end_time": 884.682179615661,
+      "text": "Mistakes in mathematics are humbling, hilarious, and sometimes heroic."
+    },
+    {
+      "start_time": 884.682179615661,
+      "end_time": 890.1327576935167,
+      "text": "Anyways, back to business. Now, let's try scalar multiplication yourself."
+    },
+    {
+      "start_time": 890.1327576935167,
+      "end_time": 894.7728408899067,
+      "text": "So, multiply the vector [2, 3], 2 and 3, by scalar -2."
+    },
+    {
+      "start_time": 894.7728408899067,
+      "end_time": 899.7776467829564,
+      "text": "What happens when you flip the vector and stretch it?"
+    },
+    {
+      "start_time": 899.7776467829564,
+      "end_time": 906.1805563465339,
+      "text": "Now, do it. You have again a lot of time if you want to pause it."
+    },
+    {
+      "start_time": 906.1805563465339,
+      "end_time": 912.1782184693786,
+      "text": "And then I'm just going to show you the solution if you don't know how to solve it."
+    },
+    {
+      "start_time": 912.1782184693786,
+      "end_time": 917.8719450116739,
+      "text": "So, here's the solution: k = -2, and V = [2, 3], 2 and 3."
+    },
+    {
+      "start_time": 917.8719450116739,
+      "end_time": 923.7075081582257,
+      "text": "So, kV should be = (2 * -2), (3 * -2),"
+    },
+    {
+      "start_time": 923.7075081582257,
+      "end_time": 927.9828686579564,
+      "text": "and the answer should be -4 and -6."
+    },
+    {
+      "start_time": 927.9828686579564,
+      "end_time": 936.7362133777839,
+      "text": "The vector now points in the opposite direction, flipped and scaled. Now you've just turned a forward motion into a backward one."
+    },
+    {
+      "start_time": 936.7362133777839,
+      "end_time": 942.7338755006286,
+      "text": "Now, let's recap what you have learned. So, scalars, which are just magnitude;"
+    },
+    {
+      "start_time": 942.7338755006286,
+      "end_time": 947.4550081851653,
+      "text": "vectors, which are magnitude plus direction; components, break vectors into x and y;"
+    },
+    {
+      "start_time": 947.4550081851653,
+      "end_time": 954.2226404454024,
+      "text": "addition, combine effects; subtraction, find differences; scalar multiplication: stretch, shrink, and flip."
+    },
+    {
+      "start_time": 954.2226404454024,
+      "end_time": 959.4705948028916,
+      "text": "Now, you're not just memorizing formulas, you're thinking geometrically, and that's the real power of linear algebra."
+    },
+    {
+      "start_time": 959.4705948028916,
+      "end_time": 971.4456566765447,
+      "text": "And if you liked this video, make sure to comment, and if you have any questions, then make sure to ask any of those because I'm really active on YouTube right now, and since we are a small channel,"
+    },
+    {
+      "start_time": 971.4456566765447,
+      "end_time": 976.5720368018141,
+      "text": "I will make sure to reply any comment of yours."
+    },
+    {
+      "start_time": 976.5720368018141,
+      "end_time": 979.3479817708334,
+      "text": "So, bye-bye."
     }
   ],
   "interventions": [
     {
       "id": "int_1",
+      "revision": 1,
       "trigger_time": 25.0,
       "concept": "Slope and Steepness",
       "difficulty": "Easy",
       "type": "single_choice",
       "question": "In the equation y = mx + b, what does m represent?",
       "options": [
-        { "id": "opt_a", "text": "The slope — how steeply the line rises or falls" },
-        { "id": "opt_b", "text": "The y-intercept — where the line crosses the y-axis" },
-        { "id": "opt_c", "text": "The x-intercept — where the line crosses the x-axis" },
-        { "id": "opt_d", "text": "The length of the line segment" }
+        {
+          "id": "opt_a",
+          "text": "The slope — how steeply the line rises or falls"
+        },
+        {
+          "id": "opt_b",
+          "text": "The y-intercept — where the line crosses the y-axis"
+        },
+        {
+          "id": "opt_c",
+          "text": "The x-intercept — where the line crosses the x-axis"
+        },
+        {
+          "id": "opt_d",
+          "text": "The length of the line segment"
+        }
       ],
+      "hints": [],
       "correct_answer": "opt_a",
       "correct_feedback": "Correct! m is the slope and tells you the rate of change — how much y changes per unit of x.",
-      "incorrect_feedback": "Incorrect. In y = mx + b, m is the slope — the rate of change. b is the y-intercept."
+      "incorrect_feedback": "Incorrect. In y = mx + b, m is the slope — the rate of change. b is the y-intercept.",
+      "sandbox_config": null,
+      "mobile_fallback": null,
+      "hypothesis_prompt": null,
+      "hypothesis_options": [],
+      "variants": {},
+      "policy": "skippable",
+      "resumption_policy": "immediate_optimistic",
+      "rubric": null
     },
     {
       "id": "int_2",
+      "revision": 1,
       "trigger_time": 55.0,
       "concept": "Reading Slope-Intercept Form",
       "difficulty": "Easy",
       "type": "single_choice",
       "question": "For the equation y = 2x + 3, what is the value of y when x = 2?",
       "options": [
-        { "id": "opt_a", "text": "5" },
-        { "id": "opt_b", "text": "7" },
-        { "id": "opt_c", "text": "9" },
-        { "id": "opt_d", "text": "3" }
+        {
+          "id": "opt_a",
+          "text": "5"
+        },
+        {
+          "id": "opt_b",
+          "text": "7"
+        },
+        {
+          "id": "opt_c",
+          "text": "9"
+        },
+        {
+          "id": "opt_d",
+          "text": "3"
+        }
       ],
+      "hints": [],
       "correct_answer": "opt_b",
       "correct_feedback": "Correct! y = 2(2) + 3 = 4 + 3 = 7.",
-      "incorrect_feedback": "Not quite. Substitute x = 2 into y = 2x + 3: y = 2(2) + 3 = 7."
+      "incorrect_feedback": "Not quite. Substitute x = 2 into y = 2x + 3: y = 2(2) + 3 = 7.",
+      "sandbox_config": null,
+      "mobile_fallback": null,
+      "hypothesis_prompt": null,
+      "hypothesis_options": [],
+      "variants": {},
+      "policy": "skippable",
+      "resumption_policy": "immediate_optimistic",
+      "rubric": null
     },
     {
       "id": "int_3",
+      "revision": 1,
       "trigger_time": 110.0,
       "concept": "Solving Linear Equations",
       "difficulty": "Medium",
       "type": "multiple_selection",
       "question": "Which two operations are used to solve 2x + 4 = 10 for x? (Select both.)",
       "options": [
-        { "id": "opt_add3",  "text": "Add 3 to both sides" },
-        { "id": "opt_sub3", "text": "Subtract 4 from both sides" },
-        { "id": "opt_div2", "text": "Divide both sides by 2" },
-        { "id": "opt_mul2", "text": "Multiply both sides by 2" }
+        {
+          "id": "opt_add3",
+          "text": "Add 3 to both sides"
+        },
+        {
+          "id": "opt_sub3",
+          "text": "Subtract 4 from both sides"
+        },
+        {
+          "id": "opt_div2",
+          "text": "Divide both sides by 2"
+        },
+        {
+          "id": "opt_mul2",
+          "text": "Multiply both sides by 2"
+        }
       ],
-      "correct_answer": ["opt_sub3", "opt_div2"],
+      "hints": [],
+      "correct_answer": [
+        "opt_sub3",
+        "opt_div2"
+      ],
       "correct_feedback": "Correct! First subtract 4 to get 2x = 6, then divide by 2 to get x = 3.",
-      "incorrect_feedback": "Not quite. The two steps are: subtract 4 from both sides, then divide both sides by 2."
+      "incorrect_feedback": "Not quite. The two steps are: subtract 4 from both sides, then divide both sides by 2.",
+      "sandbox_config": null,
+      "mobile_fallback": null,
+      "hypothesis_prompt": null,
+      "hypothesis_options": [],
+      "variants": {},
+      "policy": "skippable",
+      "resumption_policy": "immediate_optimistic",
+      "rubric": null
     },
     {
       "id": "int_4",
+      "revision": 1,
       "trigger_time": 145.0,
       "concept": "Standard Form Conversion",
       "difficulty": "Hard",
       "type": "single_choice",
       "question": "The equation 3x + 2y = 12 is converted to slope-intercept form. What is the slope?",
       "options": [
-        { "id": "opt_a", "text": "3" },
-        { "id": "opt_b", "text": "2" },
-        { "id": "opt_c", "text": "-3/2" },
-        { "id": "opt_d", "text": "6" }
+        {
+          "id": "opt_a",
+          "text": "3"
+        },
+        {
+          "id": "opt_b",
+          "text": "2"
+        },
+        {
+          "id": "opt_c",
+          "text": "-3/2"
+        },
+        {
+          "id": "opt_d",
+          "text": "6"
+        }
       ],
+      "hints": [],
       "correct_answer": "opt_c",
       "correct_feedback": "Correct! Solving for y: 2y = 12 - 3x → y = 6 - (3/2)x. Slope = -3/2.",
-      "incorrect_feedback": "Not quite. Solve 3x + 2y = 12 for y: y = 6 - (3/2)x. The slope is the coefficient of x, which is -3/2."
+      "incorrect_feedback": "Not quite. Solve 3x + 2y = 12 for y: y = 6 - (3/2)x. The slope is the coefficient of x, which is -3/2.",
+      "sandbox_config": null,
+      "mobile_fallback": null,
+      "hypothesis_prompt": null,
+      "hypothesis_options": [],
+      "variants": {},
+      "policy": "skippable",
+      "resumption_policy": "immediate_optimistic",
+      "rubric": null
     }
-  ]
+  ],
+  "recall_pool": []
 }

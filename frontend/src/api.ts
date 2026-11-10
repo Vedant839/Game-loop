@@ -87,9 +87,6 @@ export async function createLecture(lecture: Lecture): Promise<Lecture> {
 }
 
 export interface IngestLecturePayload {
-  title: string;
-  subject: string;
-  grade: string;
   video_url: string;
   duration_seconds: number;
   captions: string;

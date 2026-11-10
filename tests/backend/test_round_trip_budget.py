@@ -40,12 +40,12 @@ def test_session_hot_path_database_statement_budget(monkeypatch):
 
     monkeypatch.setattr(db, "connection", counted_connection)
     service = SessionService(lecture_service=get_lecture_service(), db=db)
-    lecture = service.lecture_service.get_lecture("linux_command_line")
+    lecture = service.lecture_service.get_lecture("math_sample_lecture")
     assert lecture is not None
     target = lecture.interventions[0]
 
     state = service.create_session(
-        "linux_command_line", client_id="budget", external_user_id="submit"
+        "math_sample_lecture", client_id="budget", external_user_id="submit"
     )
     create_session_count = len(counts)
     counts.clear()
@@ -72,7 +72,7 @@ def test_session_hot_path_database_statement_budget(monkeypatch):
     counts.clear()
 
     sync_state = service.create_session(
-        "linux_command_line", client_id="budget", external_user_id="sync"
+        "math_sample_lecture", client_id="budget", external_user_id="sync"
     )
     counts.clear()
     service.sync_playback(sync_state.session_id, playback_position=10_000.0)

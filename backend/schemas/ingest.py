@@ -2,13 +2,12 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 
 class IngestLectureRequest(BaseModel):
-    title: str = Field(..., min_length=1, max_length=200)
-    subject: str = Field(..., min_length=1, max_length=120)
-    grade: str = Field(..., min_length=1, max_length=80)
+    model_config = ConfigDict(extra="forbid")
+
     video_url: str = Field(..., min_length=1, max_length=2048)
     duration_seconds: float = Field(..., gt=0)
     captions: str = ""

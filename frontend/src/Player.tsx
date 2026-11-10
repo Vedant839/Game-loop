@@ -406,7 +406,7 @@ export default function Player({
             Your browser does not support the video tag.
           </video>
         ) : (
-          <iframe ref={frameRef} src={videoSource.embedUrl} title={lecture.title} className="lecture-video provider-frame" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />
+          <iframe ref={frameRef} src={videoSource.embedUrl} title="Lecture video" className="lecture-video provider-frame" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />
         )}
 
         {/* Custom floating fullscreen button that fullscreens the wrapper */}

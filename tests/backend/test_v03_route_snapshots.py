@@ -32,24 +32,24 @@ def _assert_student_lecture_has_no_private_fields(value) -> None:
 
 
 def test_public_lecture_route_returns_sanitized_response_shape() -> None:
-    response = client.get("/api/lectures/linear_algebra_vectors")
+    response = client.get("/api/lectures/math_sample_lecture")
 
     assert response.status_code == 200
     assert set(response.json()) == {
-        "id", "title", "subject", "grade", "duration_seconds", "video_url",
+        "id", "duration_seconds", "video_url",
         "timing_config", "transcript", "interventions",
     }
     _assert_student_lecture_has_no_private_fields(response.json())
 
 
 def test_session_lecture_route_returns_sanitized_lecture() -> None:
-    created = client.post("/api/sessions", json={"lecture_id": "linear_algebra_vectors"})
+    created = client.post("/api/sessions", json={"lecture_id": "math_sample_lecture"})
     assert created.status_code == 201
 
     response = client.get(f"/api/sessions/{created.json()['session_id']}/lecture")
 
     assert response.status_code == 200
-    assert response.json()["id"] == "linear_algebra_vectors"
+    assert response.json()["id"] == "math_sample_lecture"
     _assert_student_lecture_has_no_private_fields(response.json())
 
 

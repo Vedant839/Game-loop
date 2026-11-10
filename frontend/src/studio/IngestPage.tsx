@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { ingestLecture, type IngestLecturePayload } from "../api";
+import { readVideoDuration } from "../adapters/videoDuration";
 import type { Lecture } from "../types";
 
 type Props = { onComplete: (lecture: Lecture) => void; onCancel: () => void };
-type Stage = "ready" | "transcribing" | "generating" | "error";
+type Stage = "ready" | "reading_duration" | "transcribing" | "generating" | "error";
 const GEMINI_KEY_SLOT = "gl_creator_gemini_key";
 
 function fileToBase64(file: File): Promise<string> {
@@ -44,13 +45,21 @@ export default function IngestPage({ onComplete, onCancel }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [creatorToken, setCreatorToken] = useState("");
   const [geminiKey, setGeminiKey] = useState(() => {
-    try { return window.sessionStorage.getItem(GEMINI_KEY_SLOT) ?? ""; } catch { return ""; }
+    try {
+      const saved = window.localStorage.getItem(GEMINI_KEY_SLOT);
+      if (saved) return saved;
+      // Migrate a key saved by earlier builds, which only lasted for the tab session.
+      const legacy = window.sessionStorage.getItem(GEMINI_KEY_SLOT) ?? "";
+      if (legacy) {
+        window.localStorage.setItem(GEMINI_KEY_SLOT, legacy);
+        window.sessionStorage.removeItem(GEMINI_KEY_SLOT);
+      }
+      return legacy;
+    } catch { return ""; }
   });
+  const [useLectureKey, setUseLectureKey] = useState(false);
+  const [lectureGeminiKey, setLectureGeminiKey] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
-  const [title, setTitle] = useState("");
-  const [subject, setSubject] = useState("");
-  const [grade, setGrade] = useState("");
-  const [duration, setDuration] = useState("600");
   const [intensity, setIntensity] = useState<IngestLecturePayload["intensity"]>("standard");
   const [captionFile, setCaptionFile] = useState<File | null>(null);
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -59,15 +68,19 @@ export default function IngestPage({ onComplete, onCancel }: Props) {
   const saveKey = (value: string) => {
     setGeminiKey(value);
     try {
-      if (value) window.sessionStorage.setItem(GEMINI_KEY_SLOT, value);
-      else window.sessionStorage.removeItem(GEMINI_KEY_SLOT);
+      if (value) window.localStorage.setItem(GEMINI_KEY_SLOT, value);
+      else window.localStorage.removeItem(GEMINI_KEY_SLOT);
     } catch { /* Keep the key in component memory for this page. */ }
   };
+
+  const activeGeminiKey = useLectureKey ? lectureGeminiKey : geminiKey;
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     try {
+      setStage("reading_duration");
+      const durationSeconds = await readVideoDuration(videoUrl);
       let captions = transcript;
       let captionsFormat: IngestLecturePayload["captions_format"] = "text";
       if (captionFile) {
@@ -75,14 +88,14 @@ export default function IngestPage({ onComplete, onCancel }: Props) {
         captionsFormat = captionFile.name.toLowerCase().endsWith(".vtt") ? "vtt" : "srt";
       } else if (audioFile) {
         setStage("transcribing");
-        captions = await transcribeAudio(audioFile, geminiKey);
+        captions = await transcribeAudio(audioFile, activeGeminiKey);
         setTranscript(captions);
       }
       setStage("generating");
       const lecture = await ingestLecture({
-        title, subject, grade, video_url: videoUrl, duration_seconds: Number(duration),
+        video_url: videoUrl, duration_seconds: durationSeconds,
         captions, captions_format: captionsFormat, intensity,
-      }, creatorToken, geminiKey);
+      }, creatorToken, activeGeminiKey);
       onComplete(lecture);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Lecture ingestion failed.");
@@ -90,28 +103,24 @@ export default function IngestPage({ onComplete, onCancel }: Props) {
     }
   };
 
-  const busy = stage === "transcribing" || stage === "generating";
+  const busy = stage === "reading_duration" || stage === "transcribing" || stage === "generating";
   return (
     <section className="ingest-page" aria-labelledby="ingest-title">
       <h2 id="ingest-title">Create a lecture</h2>
-      <p>Paste a video link and add captions or transcribe audio. Your Gemini key stays in this browser session.</p>
+      <p>Paste a video link. Its length is read automatically; add captions or transcribe audio if available. Leave the key blank to use the key configured for this app. A key entered here is saved in this browser for future lectures.</p>
       <form onSubmit={handleSubmit}>
         <label>Creator token<input type="password" autoComplete="off" required value={creatorToken} onChange={(e) => setCreatorToken(e.target.value)} /></label>
-        <label>Gemini key<input type="password" autoComplete="off" value={geminiKey} onChange={(e) => saveKey(e.target.value)} /></label>
+        <label>Default Gemini key (saved for future lectures)<input type="password" autoComplete="off" value={geminiKey} onChange={(e) => saveKey(e.target.value)} /></label>
+        <label><input type="checkbox" checked={useLectureKey} onChange={(e) => setUseLectureKey(e.target.checked)} /> Use a different Gemini key for this lecture only</label>
+        {useLectureKey && <label>Gemini key for this lecture<input type="password" autoComplete="off" value={lectureGeminiKey} onChange={(e) => setLectureGeminiKey(e.target.value)} /></label>}
         <label>Video URL<input type="url" required value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="https://…" /></label>
-        <div className="form-grid">
-          <label>Title<input required value={title} onChange={(e) => setTitle(e.target.value)} /></label>
-          <label>Subject<input required value={subject} onChange={(e) => setSubject(e.target.value)} /></label>
-          <label>Grade<input required value={grade} onChange={(e) => setGrade(e.target.value)} /></label>
-          <label>Duration (seconds)<input type="number" min="1" required value={duration} onChange={(e) => setDuration(e.target.value)} /></label>
-        </div>
         <label>Checkpoint intensity<select value={intensity} onChange={(e) => setIntensity(e.target.value as typeof intensity)}>
           <option value="light">Light · 5–6 minutes apart</option><option value="standard">Standard · 3–4 minutes apart</option><option value="intense">Intense · 2–3 minutes apart</option>
         </select></label>
         <label>Caption file (SRT or VTT)<input type="file" accept=".srt,.vtt,text/vtt,application/x-subrip" onChange={(e) => { setCaptionFile(e.target.files?.[0] ?? null); setAudioFile(null); }} /></label>
         <label>Or audio for browser transcription<input type="file" accept="audio/*" onChange={(e) => { setAudioFile(e.target.files?.[0] ?? null); setCaptionFile(null); }} /></label>
         <label>Or paste transcript text<textarea rows={5} value={transcript} onChange={(e) => { setTranscript(e.target.value); setCaptionFile(null); setAudioFile(null); }} /></label>
-        {busy && <p role="status">{stage === "transcribing" ? "Transcribing audio in your browser…" : "Generating and saving checkpoints…"}</p>}
+        {busy && <p role="status">{stage === "reading_duration" ? "Reading video length…" : stage === "transcribing" ? "Transcribing audio in your browser…" : "Generating and saving checkpoints…"}</p>}
         {error && <p role="alert" className="error-message">{error}</p>}
         <div className="ingest-actions"><button type="submit" disabled={busy}>{busy ? "Working…" : "Generate lecture"}</button><button type="button" onClick={onCancel} disabled={busy}>Cancel</button></div>
       </form>

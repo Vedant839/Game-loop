@@ -4,9 +4,6 @@ from backend.schemas.lecture import Difficulty, Intervention, InterventionType, 
 def test_flash_recall_revision_mobile_fallback_and_recall_pool_schema():
     lecture = Lecture(
         id="expanded_lecture",
-        title="Expanded lecture",
-        subject="Test",
-        grade="1",
         duration_seconds=180,
         video_url="https://example.com/video.mp4",
         recall_pool=[{"question": "Recall", "correct_answer": "secret"}],

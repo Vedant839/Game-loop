@@ -214,7 +214,7 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_lecture         ON telemetry_events(lec
    - Backend rejects with HTTP 429 `{ "detail": "Monthly AI evaluation quota reached for this course." }`.
    - The player falls back to `evaluate_offline_fallback` without failing the student.
 3. **Creator authoring requests:** Studio requests can supply `X-Gemini-Key: {key}` in headers to use their own quota or fall back to server key.
-4. **Browser audio transcription:** When a creator provides raw audio on IngestPage, transcription runs directly from the creator's browser to the Google Gemini API using a key the creator pastes into the browser (stored in `sessionStorage`, never transmitted to `game-loop` backend).
+4. **Browser audio transcription:** When a creator provides raw audio on IngestPage, transcription runs directly from the creator's browser to the Google Gemini API. The default creator key is saved in browser `localStorage` for future lectures; a lecture-only override can be supplied. The selected key is sent to the backend only when authoring a lecture, and directly to Gemini for browser-side audio transcription.
 5. **Key redaction:** A custom `logging.Filter` redacts `AIzaSy[A-Za-z0-9_-]{33}` across all logs. Keys are never assigned to object fields, logged, or returned in error payloads.
 
 ### 3.3 Rate Limiting & Proxy IP Resolution
@@ -478,7 +478,7 @@ Generated markup:
   allow="fullscreen"
   referrerpolicy="strict-origin"
   sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-  title="{lecture.title}">
+  title="Lecture video">
 </iframe>
 ```
 `allow-same-origin` is required for `localStorage` / `sessionStorage`.
@@ -591,7 +591,7 @@ gcloud run deploy game-loop-api \
 - **Exit Gate:** Current baseline passes (88 backend, 21 frontend), plus P0 repository contract, storage fallback, and shared Gemini client tests. Turso contract tests remain unrun.
 
 ### P1 — Ingestion & Video Adapters
-- [x] **P1.1: IngestPage & Caption Parsers** — Added creator-authenticated ingestion for video URLs and SRT/VTT/text captions, browser-only audio transcription with the creator's session key, intensity selection, progress states, and ingestion-duration telemetry.
+- [x] **P1.1: IngestPage & Caption Parsers** — The creator flow takes the video URL, optional SRT/VTT/text or browser-transcribed audio, and intensity only. It detects video length from media metadata and records ingestion duration; no title, subject, grade, or duration entry is required.
 - [x] **P1.2: Video Adapters** — Added YouTube and Vimeo iframe adapters plus HTML5 MP4 and HLS playback through `hls.js`. Source detection and provider message behavior have local tests; live playback against external providers still needs a manual smoke check.
 - [x] **P1.3: Checkpoint Generator** — Checkpoints use transcript boundaries and Light/Standard/Intense spacing (5–6, 3–4, and 2–3 minutes, with 90 seconds minimum). Removed the six-checkpoint cap, generated mobile MCQ fallbacks for sandbox checkpoints, and created an unscheduled 3–5 item Flash Recall pool.
 - [x] **P1.4: Tab-Return Attention Trigger** — Added `POST /api/sessions/{id}/tab_event`, a >60s away check, persisted 300s cooldown, sanitized recall-card delivery, and a non-blocking player card that does not pause playback.
@@ -696,7 +696,7 @@ gcloud run deploy game-loop-api \
 | 50 | `/media/*` routes return HTTP 404 in production | section 3.4 |
 | 51 | The V0.3 engine streak characterization passes with correct, correct, correct, wrong, wrong | section 5.3 |
 | 52 | No session response contains answer or rubric fields | section 4.2 |
-| 53 | The first creator token can list the Linux lecture and its existing sessions | section 3.1 |
+| 53 | The first creator token can list the sample lecture and its existing sessions | section 3.1 |
 
 ### Acceptance Evidence (2026-11-09)
 

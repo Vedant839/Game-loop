@@ -21,7 +21,7 @@ from scripts.migrate import migrate_database
 class ContractLectures(LectureService):
     def __init__(self) -> None:
         self.lecture = Lecture(
-            id="contract-lecture", title="Contract", subject="Math", grade="9",
+            id="contract-lecture",
             duration_seconds=30, video_url="/contract.mp4",
             timing_config=TimingConfig(min_trigger_gap=5, tolerance=1),
             interventions=[Intervention(

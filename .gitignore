@@ -23,3 +23,5 @@ data/media/
 *.sqlite*
 *.db.*
 .pytest-tmp-*/
+
+sample_lectures/*.mp4

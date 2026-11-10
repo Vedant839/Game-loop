@@ -179,9 +179,6 @@ class TimingConfig(BaseModel):
 
 class Lecture(BaseModel):
     id: str = Field(..., min_length=1)
-    title: str = Field(..., min_length=1)
-    subject: str = Field(..., min_length=1)
-    grade: str = Field(..., min_length=1)
     duration_seconds: float = Field(..., gt=0.0)
     video_url: str = Field(..., min_length=1)
     timing_config: TimingConfig = Field(default_factory=TimingConfig)
@@ -220,9 +217,6 @@ class Lecture(BaseModel):
 
 class LectureSummary(BaseModel):
     id: str
-    title: str
-    subject: str
-    grade: str
     duration_seconds: float
     video_url: str
     intervention_count: int

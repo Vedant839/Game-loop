@@ -14,9 +14,6 @@ class _LectureService:
 def test_first_try_correct_is_persisted_once_on_initial_evaluation():
     lecture = Lecture(
         id="attempt_tracking",
-        title="Attempt tracking",
-        subject="Test",
-        grade="1",
         duration_seconds=30,
         video_url="https://example.com/video.mp4",
         interventions=[

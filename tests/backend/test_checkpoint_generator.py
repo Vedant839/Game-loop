@@ -17,7 +17,7 @@ def _lecture(duration: int = 1800) -> Lecture:
         for start in range(0, duration - 100, 120)
     ]
     return Lecture(
-        id="checkpoint_test", title="Checkpoint test", subject="Science", grade="12",
+        id="checkpoint_test",
         duration_seconds=float(duration), video_url="https://example.com/video.mp4",
         timing_config=TimingConfig(min_trigger_gap=90, tolerance=2),
         transcript=transcript, interventions=[],

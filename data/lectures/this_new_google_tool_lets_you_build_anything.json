@@ -1,0 +1,208 @@
+{
+  "id": "this_new_google_tool_lets_you_build_anything",
+  "duration_seconds": 921.0194661458333,
+  "video_url": "/media/this_new_google_tool_lets_you_build_anything.mp4",
+  "timing_config": {
+    "min_trigger_gap": 15.0,
+    "tolerance": 2.0
+  },
+  "transcript": [
+    {
+      "start_time": 0.0,
+      "end_time": 5.449819326306706,
+      "text": "Everyone says AI can help you code, but nobody shows you how to actually build things fast using live coding in Google Antigravity."
+    },
+    {
+      "start_time": 5.449819326306706,
+      "end_time": 7.871961249109686,
+      "text": "So, the trial planner is just an example today."
+    },
+    {
+      "start_time": 7.871961249109686,
+      "end_time": 16.954993459620866,
+      "text": "The real lesson is, if you know how to live code with Google Antigravity, then you can build any tool, solve any problem, and automate any workflow."
+    },
+    {
+      "start_time": 16.954993459620866,
+      "end_time": 26.643561150832788,
+      "text": "I'll show you how live coding works in Google Antigravity and we'll use a tiny example project just to prove this that once you get this method, then you can build absolutely anything with live coding."
+    },
+    {
+      "start_time": 26.643561150832788,
+      "end_time": 35.12105788064322,
+      "text": "So, yeah, Google Antigravity is a coding platform in which has an AI agent."
+    },
+    {
+      "start_time": 35.12105788064322,
+      "end_time": 47.23176749465812,
+      "text": "So Google Antigravity is an AI IDE which goes way beyond code completion and it can do many stuff like code completion and debugging and research."
+    },
+    {
+      "start_time": 47.23176749465812,
+      "end_time": 75.69193508759314,
+      "text": "And a lot of stuff, and plus it can also do the research and web browsing for you, all in the same workspace."
+    },
+    {
+      "start_time": 75.69193508759314,
+      "end_time": 84.77496729810431,
+      "text": "So, yeah, and that's why a lot of people want to use Google Antigravity."
+    },
+    {
+      "start_time": 84.77496729810431,
+      "end_time": 107.78531556473264,
+      "text": "So you can download this by simply going to download page if you're on Windows then you can just simply go into here and then you can download a simple antigravity.exe file."
+    },
+    {
+      "start_time": 107.78531556473264,
+      "end_time": 127.16245094715649,
+      "text": "And which you can simply open and then just go okay, okay, okay, buttons just simply it, if you're on Mac then it can be a little different."
+    },
+    {
+      "start_time": 127.16245094715649,
+      "end_time": 150.77833469448555,
+      "text": "If you're on Linux like me, just simply the download and you just have to run these three commands, so you just have to do this, this and this."
+    },
+    {
+      "start_time": 150.77833469448555,
+      "end_time": 165.31118623130342,
+      "text": "So this is really easy and uh let's say you're on Mac or for Intel then you have to download this file."
+    },
+    {
+      "start_time": 165.31118623130342,
+      "end_time": 190.74367642073472,
+      "text": "If you're on Apple Silicon like if you have a Mac OS with a Apple chip then you should do this."
+    },
+    {
+      "start_time": 190.74367642073472,
+      "end_time": 209.51527632245782,
+      "text": "Also download another file and it is really similar to Windows so after the installation part, we can just simply go to the, okay, now let's do the setup."
+    },
+    {
+      "start_time": 209.51527632245782,
+      "end_time": 242.8197277609988,
+      "text": "So you just have to go next and then either you can import from VS Code or you can start fresh."
+    },
+    {
+      "start_time": 242.8197277609988,
+      "end_time": 254.32490189431297,
+      "text": "So I would recommend you to import from VS Code if you have done some coding before, but if you are just a newbie, then just start fresh."
+    },
+    {
+      "start_time": 254.32490189431297,
+      "end_time": 257.3525792978167,
+      "text": "And then you can choose any of these areas, so I personal favorite is dark."
+    },
+    {
+      "start_time": 257.3525792978167,
+      "end_time": 288.2348888135547,
+      "text": "And then you can do any of these, like review driven development or custom configuration or agent assistant development, agent driven."
+    },
+    {
+      "start_time": 288.2348888135547,
+      "end_time": 321.53934025209566,
+      "text": "So the agent driven one is like all the stuff done by the AI agent and the agent assistant one in which you do the development, AI like helps you to do it."
+    },
+    {
+      "start_time": 321.53934025209566,
+      "end_time": 330.62237246260685,
+      "text": "Okay, so let's start live coding, so yes, first of all, if you don't know JSON,"
+    },
+    {
+      "start_time": 330.62237246260685,
+      "end_time": 386.93717216777617,
+      "text": "then let me tell you how it actually works, so we just give two curly brackets and we continue with double inverted comma, and then I'm going to put task"
+    },
+    {
+      "start_time": 386.93717216777617,
+      "end_time": 438.4076880273395,
+      "text": "colon, make a travel one travel planner app in file, like the file which is currently on my tab, travel.py."
+    },
+    {
+      "start_time": 438.4076880273395,
+      "end_time": 458.3903588904641,
+      "text": "And then I'm going to get and again three spaces and then we'll put file colon, travel planner.py."
+    },
+    {
+      "start_time": 458.3903588904641,
+      "end_time": 497.7501651360125,
+      "text": "Should be the file only and then I'm going to give it a try again, three spaces and then quality, quality as much as possible."
+    },
+    {
+      "start_time": 497.7501651360125,
+      "end_time": 515.3106940763341,
+      "text": "Now I'm going to just enter both to the AI agent and let them handle the thing."
+    },
+    {
+      "start_time": 515.3106940763341,
+      "end_time": 551.0372874376781,
+      "text": "So the AI agent and the JSON file has already analyzed it, and the one with raw text hasn't yet."
+    },
+    {
+      "start_time": 551.0372874376781,
+      "end_time": 564.3590680130944,
+      "text": "So as you can see over here, now it also had main.py and analyzed, but let's see how well they do."
+    },
+    {
+      "start_time": 564.3590680130944,
+      "end_time": 592.2137001253287,
+      "text": "So I think the raw text one is about to use HTML and CSS, okay, the JSON one already prepared the file, even though I clicked here later."
+    },
+    {
+      "start_time": 592.2137001253287,
+      "end_time": 609.7742290656504,
+      "text": "And that is why I used JSON here, just to show you guys why JSON is more useful when talking to AI agents."
+    },
+    {
+      "start_time": 609.7742290656504,
+      "end_time": 635.8122547357824,
+      "text": "So as you can see, the code over here that the JSON one made, and not going to lie, it was really fast with almost the same prompt, but just in JSON."
+    },
+    {
+      "start_time": 635.8122547357824,
+      "end_time": 658.21706752171,
+      "text": "Okay, so as you can see, here's our new app, with GUI as you can see."
+    },
+    {
+      "start_time": 658.21706752171,
+      "end_time": 676.9886674234331,
+      "text": "I'm going to put Paris as a trip, and then I'm going to put 2026 January 21."
+    },
+    {
+      "start_time": 676.9886674234331,
+      "end_time": 716.9540091496823,
+      "text": "Yeah, and I'm going to put 2026 January 28."
+    },
+    {
+      "start_time": 716.9540091496823,
+      "end_time": 735.7256090514054,
+      "text": "Okay, now it got created."
+    },
+    {
+      "start_time": 735.7256090514054,
+      "end_time": 785.3795184688664,
+      "text": "Now, as you can see, we have Paris, oh my god, it also gave budget tracker as well, and hold on, so it also made JSON and travel like the database, which it stores all the data, which is also really good because"
+    },
+    {
+      "start_time": 785.3795184688664,
+      "end_time": 842.2998536547365,
+      "text": "like, it is like storing the data which the user is about to enter in one file, so it knows what the user had, and also this the raw text one also completed it."
+    },
+    {
+      "start_time": 842.2998536547365,
+      "end_time": 874.9987696125768,
+      "text": "So, um, yeah, let me see, so it to also import http, http, and OS, okay, this one looks complex, so"
+    },
+    {
+      "start_time": 874.9987696125768,
+      "end_time": 908.3032210511177,
+      "text": "Wow, this is so long. I don't know how well it does, but we'll see."
+    },
+    {
+      "start_time": 908.3032210511177,
+      "end_time": 921.0194661458333,
+      "text": "And you can see this one is also long, but not that long like this one is like almost double in terms of lines."
+    }
+  ],
+  "interventions": [],
+  "recall_pool": []
+}

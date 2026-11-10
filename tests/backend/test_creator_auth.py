@@ -18,7 +18,7 @@ client = TestClient(app)
 def test_creator_routes_reject_missing_token():
     assert client.get("/api/telemetry").status_code == 401
     assert client.get("/api/learners/default_client/learner").status_code == 401
-    assert client.get("/api/studio/lectures/linear_algebra_vectors").status_code == 401
+    assert client.get("/api/studio/lectures/math_sample_lecture").status_code == 401
     assert client.post("/api/lectures", json={}).status_code == 401
 
 
@@ -80,19 +80,19 @@ def test_creator_cannot_read_another_creators_telemetry_or_profile(creator_token
     assert client.get("/api/learners/creator_b/b-user", headers=creator_a).status_code == 403
 
 
-def test_first_creator_can_list_linux_lecture_and_its_sessions(creator_token_factory):
+def test_first_creator_can_list_sample_lecture_and_its_sessions(creator_token_factory):
     header = creator_token_factory("default_client")
     created = client.post(
         "/api/sessions",
-        json={"lecture_id": "linux_command_line", "client_id": "default_client", "learner_id": "legacy-learner"},
+        json={"lecture_id": "math_sample_lecture", "client_id": "default_client", "learner_id": "sample-learner"},
     )
     assert created.status_code == 201
 
     lectures = client.get("/api/lectures")
-    assert any(item["id"] == "linux_command_line" for item in lectures.json())
+    assert any(item["id"] == "math_sample_lecture" for item in lectures.json())
 
     sessions = client.get(
-        "/api/studio/sessions?lecture_id=linux_command_line", headers=header
+        "/api/studio/sessions?lecture_id=math_sample_lecture", headers=header
     )
     assert sessions.status_code == 200
     assert any(item["session_id"] == created.json()["session_id"] for item in sessions.json())
@@ -103,7 +103,7 @@ def test_studio_lecture_route_preserves_full_answers(creator_token_factory):
     header = creator_token_factory("default_client")
 
     response = client.get(
-        "/api/studio/lectures/linux_command_line", headers=header
+        "/api/studio/lectures/math_sample_lecture", headers=header
     )
 
     assert response.status_code == 200
@@ -118,7 +118,7 @@ def test_studio_lecture_is_scoped_to_the_creating_creator(creator_token_factory,
 
     creator_a = creator_token_factory("creator_a")
     creator_b = creator_token_factory("creator_b")
-    lecture = get_lecture_service().get_lecture("linux_command_line")
+    lecture = get_lecture_service().get_lecture("math_sample_lecture")
     assert lecture is not None
     lecture.id = "creator_b_private_lecture"
     monkeypatch.setattr(get_lecture_service(), "save_lecture", lambda _lecture: None)

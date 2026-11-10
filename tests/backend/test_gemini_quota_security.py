@@ -1,4 +1,4 @@
-﻿"""Monthly Gemini quota and API-key log redaction checks."""
+"""Monthly Gemini quota and API-key log redaction checks."""
 
 import logging
 import asyncio
@@ -26,7 +26,7 @@ def _request() -> Request:
         {
             "type": "http",
             "method": "POST",
-            "path": "/api/lectures/linear_algebra_vectors/generate_interventions",
+            "path": "/api/lectures/math_sample_lecture/generate_interventions",
             "headers": [],
             "client": ("testclient", 1234),
             "server": ("testserver", 80),
@@ -52,7 +52,7 @@ def test_monthly_token_cap_blocks_gemini_call(monkeypatch):
         return kwargs["gemini_client"].generate_content(
             api_key=kwargs["api_key"],
             creator_id=kwargs["creator_id"],
-            lecture_id="linear_algebra_vectors",
+            lecture_id="math_sample_lecture",
             event_type="lecture_generation",
             model="fake-model",
             contents="prompt",
@@ -63,7 +63,7 @@ def test_monthly_token_cap_blocks_gemini_call(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         generate_interventions_for_lecture(
             request=_request(),
-            lecture_id="linear_algebra_vectors",
+            lecture_id="math_sample_lecture",
             creator={"creator_id": "creator_a"},
         )
     assert exc.value.status_code == 429
@@ -92,7 +92,7 @@ def test_simulated_gemini_failure_redacts_key_from_logs_and_response(monkeypatch
         return kwargs["gemini_client"].generate_content(
             api_key=kwargs["api_key"],
             creator_id=kwargs["creator_id"],
-            lecture_id="linear_algebra_vectors",
+            lecture_id="math_sample_lecture",
             event_type="lecture_generation",
             model="fake-model",
             contents="prompt",
@@ -103,7 +103,7 @@ def test_simulated_gemini_failure_redacts_key_from_logs_and_response(monkeypatch
         with pytest.raises(HTTPException) as exc:
             generate_interventions_for_lecture(
                 request=_request(),
-                lecture_id="linear_algebra_vectors",
+                lecture_id="math_sample_lecture",
                 creator={"creator_id": "creator_a"},
             )
 
@@ -150,7 +150,7 @@ def test_evaluator_logs_each_provider_call_and_uses_offline_fallback(monkeypatch
                 "A vector has magnitude and direction.",
                 {"key_concepts": ["magnitude"]},
                 creator_id="quota_creator",
-                lecture_id="linear_algebra_vectors",
+                lecture_id="math_sample_lecture",
             )
         )
         assert result.score >= 0
@@ -211,7 +211,7 @@ def test_authoring_usage_is_logged_for_each_failed_model_call(monkeypatch):
 
     monkeypatch.setattr(genai, "Client", FakeClient)
     monkeypatch.setattr(authoring.time, "sleep", lambda _seconds: None)
-    lecture = get_lecture_service().get_lecture("linear_algebra_vectors")
+    lecture = get_lecture_service().get_lecture("math_sample_lecture")
 
     with pytest.raises(RuntimeError, match="generation failed"):
         authoring.generate_interventions_with_gemini(

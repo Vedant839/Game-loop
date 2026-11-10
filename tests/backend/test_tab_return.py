@@ -10,7 +10,7 @@ from scripts.migrate import migrate_database
 def test_tab_return_requires_more_than_sixty_seconds_and_obeys_cooldown(tmp_path, monkeypatch):
     migrate_database(get_database().db_path)
     lecture = Lecture(
-        id="tab_recall_test", title="Tab recall", subject="Science", grade="12",
+        id="tab_recall_test",
         duration_seconds=300, video_url="https://example.com/video.mp4",
         timing_config=TimingConfig(),
         transcript=[TranscriptSegment(start_time=0, end_time=10, text="Vectors <script>alert(1)</script> have magnitude.")],

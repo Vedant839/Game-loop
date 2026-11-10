@@ -159,9 +159,6 @@ def test_inquiry_sandbox_intervention_requires_sandbox_or_variants() -> None:
 def _make_inquiry_lecture() -> Lecture:
     return Lecture(
         id="test_inquiry_lecture",
-        title="Test Inquiry",
-        subject="CS",
-        grade="Grade 10",
         duration_seconds=300.0,
         video_url="/media/math_sample_lecture.mp4",
         timing_config={"min_trigger_gap": 30.0, "tolerance": 3.0},
@@ -317,11 +314,10 @@ def test_api_learner_profile_endpoint(creator_token_factory) -> None:
     assert data["client_id"] == "test_corp"
 
 
-def test_python_basics_lecture_loads_and_validates() -> None:
+def test_sample_lecture_loads_and_validates() -> None:
     svc = LectureService()
-    lecture = svc.get_lecture("python_basics_lists")
+    lecture = svc.get_lecture("math_sample_lecture")
     assert lecture is not None
-    assert lecture.id == "python_basics_lists"
-    types = [i.type.value for i in lecture.interventions]
-    assert "predict_and_verify" in types
-    assert "inquiry_sandbox" in types
+    assert lecture.id == "math_sample_lecture"
+    assert lecture.duration_seconds > 0
+    assert lecture.transcript

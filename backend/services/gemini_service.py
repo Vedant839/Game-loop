@@ -50,11 +50,8 @@ def _build_prompt(lecture: Lecture) -> str:
     return f"""You are an expert educational content author. Your task is to generate
 learning interventions (quiz questions) for the following lecture.
 
-LECTURE METADATA
-================
-Title: {lecture.title}
-Subject: {lecture.subject}
-Grade: {lecture.grade}
+VIDEO LENGTH
+============
 Duration: {lecture.duration_seconds:.1f} seconds
 
 TIMESTAMPED TRANSCRIPT

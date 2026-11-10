@@ -49,9 +49,6 @@ def sample_lecture():
     )
     return Lecture(
         id="test_lecture_persistence",
-        title="Geometry Basics",
-        subject="Mathematics",
-        grade="Grade 9",
         duration_seconds=60.0,
         video_url="/media/sample.mp4",
         timing_config=TimingConfig(min_trigger_gap=10.0, tolerance=1.5),

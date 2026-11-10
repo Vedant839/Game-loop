@@ -48,7 +48,7 @@ def test_session_creation_is_limited_by_rightmost_forwarded_ip():
     for index in range(30):
         response = client.post(
             "/api/sessions",
-            json={"lecture_id": "linux_command_line"},
+            json={"lecture_id": "math_sample_lecture"},
             headers={
                 "X-Forwarded-For": f"192.0.2.{index + 1}, 198.51.100.44"
             },
@@ -57,7 +57,7 @@ def test_session_creation_is_limited_by_rightmost_forwarded_ip():
 
     limited = client.post(
         "/api/sessions",
-        json={"lecture_id": "linux_command_line"},
+        json={"lecture_id": "math_sample_lecture"},
         headers={"X-Forwarded-For": "203.0.113.88, 198.51.100.44"},
     )
     assert limited.status_code == 429

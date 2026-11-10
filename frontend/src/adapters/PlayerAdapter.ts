@@ -73,6 +73,9 @@ class IFrameVideoAdapter implements VideoPlayerAdapter {
       this.send({ method: "addEventListener", value: "timeupdate" });
       this.send({ method: "addEventListener", value: "seeking" });
       this.send({ method: "addEventListener", value: "ended" });
+      this.send({ method: "getDuration" });
+    } else if (this.provider === "vimeo" && data?.method === "getDuration" && typeof data?.value === "number") {
+      this.duration = data.value;
     } else if (data?.event === "timeupdate" && typeof data?.data?.seconds === "number") {
       this.time = data.data.seconds;
       this.duration = Number(data.data.duration) || this.duration;

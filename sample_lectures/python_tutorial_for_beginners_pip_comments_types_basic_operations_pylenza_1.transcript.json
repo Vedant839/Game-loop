@@ -1,0 +1,235 @@
+{
+  "duration_seconds": 872.6522786458333,
+  "segments": [
+    {
+      "start_seconds": 0.0,
+      "end_seconds": 1.2162401096109177,
+      "text": "Welcome to my channel, Pylons."
+    },
+    {
+      "start_seconds": 1.2162401096109177,
+      "end_seconds": 4.256840383638211,
+      "text": "So today, I'll be teaching you basic Python."
+    },
+    {
+      "start_seconds": 4.256840383638211,
+      "end_seconds": 7.297440657665506,
+      "text": "So let's start with pip."
+    },
+    {
+      "start_seconds": 7.297440657665506,
+      "end_seconds": 10.94616098649826,
+      "text": "So, let me just create a new terminal."
+    },
+    {
+      "start_seconds": 10.94616098649826,
+      "end_seconds": 16.419241479747388,
+      "text": "So, this is a new terminal, and by the way, for instruction, I'm going to teach you in Pycharm."
+    },
+    {
+      "start_seconds": 16.419241479747388,
+      "end_seconds": 28.581642575856566,
+      "text": "So we can, so what pip is, pip is basically Python's package manager, which we can use to install other people's code, meaning modules."
+    },
+    {
+      "start_seconds": 28.581642575856566,
+      "end_seconds": 34.66284312391115,
+      "text": "Basically, you can think of it like a library, like how you go in a library, borrow books."
+    },
+    {
+      "start_seconds": 34.66284312391115,
+      "end_seconds": 62.0282455901568,
+      "text": "And that's basically it. So to check our pip version, we just put pip two hyphens and version, and enter, we will get our pip version right over here, you can see it. And uh if you want to install other people's code, meaning the modules,"
+    },
+    {
+      "start_seconds": 62.0282455901568,
+      "end_seconds": 72.3662865218496,
+      "text": "we can simply do it by pip install any random module, let's say NumPy."
+    },
+    {
+      "start_seconds": 72.3662865218496,
+      "end_seconds": 86.35304778237516,
+      "text": "So it will basically install the NumPy. By the way, in my case, it's already installed and if we want to uninstall the module, we just put pip"
+    },
+    {
+      "start_seconds": 86.35304778237516,
+      "end_seconds": 96.69108871406796,
+      "text": "uninstall the module name, meaning NumPy. So NumPy is a module used for mathematical calculations, so we won't focus much on that."
+    },
+    {
+      "start_seconds": 96.69108871406796,
+      "end_seconds": 102.77228926212254,
+      "text": "If I'm just doing no for now, because I don't want to uninstall it. So yeah,"
+    },
+    {
+      "start_seconds": 102.77228926212254,
+      "end_seconds": 107.63724970056622,
+      "text": "that was basically it. That was pip."
+    },
+    {
+      "start_seconds": 107.63724970056622,
+      "end_seconds": 124.0564911803136,
+      "text": "Now, let me tell, let me tell you about comments."
+    },
+    {
+      "start_seconds": 124.0564911803136,
+      "end_seconds": 135.6107722216173,
+      "text": "So, comments are basically written lines for other humans to read, which Python will ignore."
+    },
+    {
+      "start_seconds": 135.6107722216173,
+      "end_seconds": 142.90821287928281,
+      "text": "So, let's say I want to write hi jack. Hi jack, sorry."
+    },
+    {
+      "start_seconds": 142.90821287928281,
+      "end_seconds": 148.38129337253196,
+      "text": "So, if I want this, then Python will throw an error."
+    },
+    {
+      "start_seconds": 148.38129337253196,
+      "end_seconds": 183.65225655124857,
+      "text": "As you can see over here, because it's invalid syntax, syntax error. So, if we want to avoid those types of errors in our code, we can just simply do this little comment,"
+    },
+    {
+      "start_seconds": 183.65225655124857,
+      "end_seconds": 209.19329885307783,
+      "text": "which is the hashtag, which we can use it to comment our lines. And this basically makes our code clean and readable."
+    },
+    {
+      "start_seconds": 209.19329885307783,
+      "end_seconds": 213.45013923671604,
+      "text": "So that was basically it for comments. Now, let me teach you about the other stuff,"
+    },
+    {
+      "start_seconds": 213.45013923671604,
+      "end_seconds": 219.53133978477064,
+      "text": "which is types and print."
+    },
+    {
+      "start_seconds": 219.53133978477064,
+      "end_seconds": 245.0723820865999,
+      "text": "So, as you know by name, types are any type of number, text, or whatever."
+    },
+    {
+      "start_seconds": 245.0723820865999,
+      "end_seconds": 251.76170268945995,
+      "text": "Now, let me teach you those three types."
+    },
+    {
+      "start_seconds": 251.76170268945995,
+      "end_seconds": 266.96470405959644,
+      "text": "Three types, those can be strings, anything, let's say we put Hank."
+    },
+    {
+      "start_seconds": 266.96470405959644,
+      "end_seconds": 299.19506696428573,
+      "text": "And then, let me just put comments like strings, so any value or any text bounded with these"
+    },
+    {
+      "start_seconds": 299.19506696428573,
+      "end_seconds": 322.3036290468932,
+      "text": "double quotation marks are called strings, okay? It can be numbers, Hank 23, whatever, it can be symbols, or whatever."
+    },
+    {
+      "start_seconds": 322.3036290468932,
+      "end_seconds": 346.0203111843061,
+      "text": "Now, for integers, so any number can be integers, let's say 19, this can be an integer."
+    },
+    {
+      "start_seconds": 346.0203111843061,
+      "end_seconds": 383.11563452743906,
+      "text": "Now, for float, any number with decimal points can be a float. This is a float."
+    },
+    {
+      "start_seconds": 383.11563452743906,
+      "end_seconds": 434.1977191310976,
+      "text": "Quite simple. Now, if we want this, then we will not get anything. And that is what we were going to reuse the print statement for."
+    },
+    {
+      "start_seconds": 434.1977191310976,
+      "end_seconds": 460.34688148773233,
+      "text": "So, now I'm going to teach you about operators. So, operators like operators are a thing in Python, which we can use to define values"
+    },
+    {
+      "start_seconds": 460.34688148773233,
+      "end_seconds": 507.1721257077527,
+      "text": "or any other types. Let's say I'm going to put name is equals to, just like an algebra, we put x is equals to this, x is equals to that."
+    },
+    {
+      "start_seconds": 507.1721257077527,
+      "end_seconds": 554.6054899825784,
+      "text": "And then I'm going to put age is equals to 19, and then I'm going to put money is equals to 100."
+    },
+    {
+      "start_seconds": 554.6054899825784,
+      "end_seconds": 561.2948105854385,
+      "text": "So, this is just an example. Now, these are the operators."
+    },
+    {
+      "start_seconds": 561.2948105854385,
+      "end_seconds": 601.4307342025987,
+      "text": "And uh if we want the code, then we will get nothing. Okay, we got nothing."
+    },
+    {
+      "start_seconds": 601.4307342025987,
+      "end_seconds": 626.3636564496226,
+      "text": "But, if we want to print those values here in the output panel, then we could just simply use the print statement."
+    },
+    {
+      "start_seconds": 626.3636564496226,
+      "end_seconds": 667.1077001215883,
+      "text": "Print, p-r-i-n-t, and then we put the brackets, and then we put anything like name, just like how we defined there, or age,"
+    },
+    {
+      "start_seconds": 667.1077001215883,
+      "end_seconds": 689.6081421493903,
+      "text": "and we can do um multiple by just adding a comma. I'm going to use the comma."
+    },
+    {
+      "start_seconds": 689.6081421493903,
+      "end_seconds": 700.5543031358886,
+      "text": "Okay. comma, and we have our money."
+    },
+    {
+      "start_seconds": 700.5543031358886,
+      "end_seconds": 738.8658665886325,
+      "text": "So, we can use the print statement for displaying those values, those particular values."
+    },
+    {
+      "start_seconds": 738.8658665886325,
+      "end_seconds": 765.6231490000727,
+      "text": "Okay. Now, let's run the code."
+    },
+    {
+      "start_seconds": 765.6231490000727,
+      "end_seconds": 773.5287097125437,
+      "text": "And then we got Hank, as we defined there."
+    },
+    {
+      "start_seconds": 773.5287097125437,
+      "end_seconds": 786.9073509182638,
+      "text": "But we won't get the uh quotation marks because in Python, the quotation marks, meaning the strings,"
+    },
+    {
+      "start_seconds": 786.9073509182638,
+      "end_seconds": 810.0159130008711,
+      "text": "get hided when we print them for the better output, for more efficient output."
+    },
+    {
+      "start_seconds": 810.0159130008711,
+      "end_seconds": 827.6513945902294,
+      "text": "And then we got the age and we got the float."
+    },
+    {
+      "start_seconds": 827.6513945902294,
+      "end_seconds": 853.8005569468642,
+      "text": "Okay. So, now you can also like put those directly, let's say, uh, I just I'm just going to do this"
+    },
+    {
+      "start_seconds": 853.8005569468642,
+      "end_seconds": 872.6522786458333,
+      "text": "for now. Let's say those these do not exist, then how am I supposed to put like run those? If I try to run those because since Python is is ignoring these three operators or variables."
+    }
+  ]
+}

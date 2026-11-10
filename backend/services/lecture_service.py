@@ -1,6 +1,8 @@
 """Lecture loader and repository service."""
 
 import json
+import re
+import unicodedata
 from pathlib import Path
 from backend.config import get_settings
 from backend.schemas.lecture import Lecture, LectureSummary
@@ -22,19 +24,13 @@ class LectureService:
         if not self.lectures_dir.exists():
             return summaries
 
-        hidden_ids = {"math_sample_lecture", "physics_kinematics", "python_basics_lists"}
         for file_path in sorted(self.lectures_dir.glob("*.json")):
             try:
                 lecture = self.get_lecture_by_file(file_path)
                 lecture = self._runtime_lectures.get(lecture.id, lecture)
-                if lecture.id in hidden_ids and lecture.id != "linear_algebra_vectors":
-                    continue
                 summaries.append(
                     LectureSummary(
                         id=lecture.id,
-                        title=lecture.title,
-                        subject=lecture.subject,
-                        grade=lecture.grade,
                         duration_seconds=lecture.duration_seconds,
                         video_url=lecture.video_url,
                         intervention_count=len(lecture.interventions),
@@ -44,8 +40,8 @@ class LectureService:
                 # Invalid JSON files are skipped or flagged
                 continue
 
-        priority = {"linear_algebra_vectors": 0, "linux_command_line": 1}
-        return sorted(summaries, key=lambda lecture: (priority.get(lecture.id, 99), lecture.title))
+        priority = {"math_sample_lecture": 0}
+        return sorted(summaries, key=lambda lecture: (priority.get(lecture.id, 99), lecture.id))
 
     def get_lecture(self, lecture_id: str) -> Lecture | None:
         runtime_lecture = self._runtime_lectures.get(lecture_id)
@@ -61,6 +57,20 @@ class LectureService:
         content = file_path.read_text(encoding="utf-8-sig")
         data = json.loads(content)
         return Lecture.model_validate(data)
+
+    def is_sample_lecture(self, lecture_id: str) -> bool:
+        """Return whether an ID belongs to the canonical or bundled demo set."""
+        if lecture_id == "math_sample_lecture":
+            return True
+        sample_dir = self.lectures_dir.parent.parent / "sample_lectures"
+        if not sample_dir.exists():
+            return False
+        for video_path in sample_dir.glob("*.mp4"):
+            ascii_stem = unicodedata.normalize("NFKD", video_path.stem).encode("ascii", "ignore").decode()
+            bundled_id = re.sub(r"[^a-z0-9]+", "_", ascii_stem.lower()).strip("_")
+            if bundled_id == lecture_id:
+                return True
+        return False
 
     def save_lecture(self, lecture: Lecture) -> None:
         file_path = self.lectures_dir / f"{lecture.id}.json"
@@ -126,7 +136,7 @@ def _build_generated_interventions(
     interventions: list[Intervention] = []
     for i, t in enumerate(adjusted):
         seg = _nearest_transcript_segment(lecture, t)
-        concept_text = _first_words(seg.text if seg is not None else lecture.title, 6)
+        concept_text = _first_words(seg.text if seg is not None else "the key idea", 6)
         # Build simple deterministic options: correct is the concept, others are generic distractors
         opts = [
             Option(id="opt_a", text=concept_text),

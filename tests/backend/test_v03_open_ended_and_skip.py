@@ -66,9 +66,6 @@ def lecture_with_open_ended():
     )
     lecture = Lecture(
         id="v03_proofs_lecture",
-        title="Geometric Proofs",
-        subject="Mathematics",
-        grade="Grade 9",
         duration_seconds=90.0,
         video_url="/media/proofs.mp4",
         timing_config=TimingConfig(min_trigger_gap=10.0, tolerance=1.5),

@@ -13,7 +13,7 @@ import time
 from typing import Literal
 
 from backend.config import get_settings
-from backend.auth import require_creator
+from backend.auth import optional_creator, require_creator
 from backend.database import DatabaseUnavailableError, get_database
 from backend.lecture_sanitizer import sanitize_student_lecture
 from backend.schemas.lecture import Lecture, LectureSummary, ResumptionPolicy, TimingConfig
@@ -94,10 +94,10 @@ def create_lecture(
 ) -> Lecture:
     """Create a custom lecture definition and persist it on disk."""
     service = get_lecture_service()
-    if lecture.id in {"math_sample_lecture", "physics_kinematics"}:
+    if lecture.id == "math_sample_lecture":
         raise HTTPException(
             status_code=400,
-            detail="Legacy lecture IDs are reserved; choose a custom lecture ID.",
+            detail="The sample lecture ID is reserved; choose a custom lecture ID.",
         )
     service.save_lecture(lecture)
     video_url = lecture.video_url.lower()
@@ -110,7 +110,7 @@ def create_lecture(
     get_database().lectures.save_lecture(
         lecture_id=lecture.id,
         creator_id=_creator_id,
-        title=lecture.title,
+        title=lecture.id,
         video_url=lecture.video_url,
         source_type=source_type,
         content_json=lecture.model_dump_json(),
@@ -150,9 +150,6 @@ def ingest_lecture(
     lecture_id = "ingest_" + uuid.uuid4().hex[:12]
     lecture = Lecture(
         id=lecture_id,
-        title=payload.title.strip(),
-        subject=payload.subject.strip(),
-        grade=payload.grade.strip(),
         duration_seconds=payload.duration_seconds,
         video_url=payload.video_url,
         transcript=transcript,
@@ -198,7 +195,7 @@ def ingest_lecture(
     get_database().lectures.save_lecture(
         lecture_id=lecture.id,
         creator_id=creator["creator_id"],
-        title=lecture.title,
+        title=lecture.id,
         video_url=lecture.video_url,
         source_type=source_type,
         content_json=lecture.model_dump_json(),
@@ -288,13 +285,12 @@ def generate_interventions_for_lecture(
     lecture_id: str,
     max_count: int | None = None,
     intensity: Literal["light", "standard", "intense"] = "standard",
-    creator: dict[str, str] = Depends(require_creator),
+    creator: dict[str, str] | None = Depends(optional_creator),
 ):
     """Generate interventions for a lecture, grounded in its actual transcript content.
 
     When a Gemini API key is configured, this calls Gemini with the full
-    transcript so that the generated questions are specific to the lecture's
-    subject, grade, and content (not generic placeholders).
+    transcript and video length to ground generated checkpoints in the lecture.
 
     Falls back to a local deterministic generator when no API key is set.
     The fallback is clearly flagged in the response via the X-Generation-Mode
@@ -321,9 +317,16 @@ def generate_interventions_for_lecture(
     creator_supplied_key = bool(api_key)
     if not api_key and settings.gemini_api_key is not None:
         api_key = settings.gemini_api_key.get_secret_value()
-    if api_key and requested_count:
+    # The bundled sample is intended for audience demos. Anonymous users may
+    # refresh it with deterministic checkpoints, but never trigger paid Gemini
+    # generation. Creator-authenticated users retain the normal Gemini path.
+    anonymous_sample = creator is None and service.is_sample_lecture(lecture_id)
+    if creator is None and not anonymous_sample:
+        raise HTTPException(status_code=401, detail="Creator token required")
+
+    if api_key and requested_count and not anonymous_sample:
         db = get_database()
-        creator_id = creator["creator_id"] if isinstance(creator, dict) else "default_client"
+        creator_id = creator["creator_id"]
         gemini_client = GeminiClient(db=db, settings=settings)
         try:
             generated = generate_interventions_with_gemini(

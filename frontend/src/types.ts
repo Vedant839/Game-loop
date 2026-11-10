@@ -106,9 +106,6 @@ export interface TimingConfig {
 
 export interface Lecture {
   id: string;
-  title: string;
-  subject: string;
-  grade: string;
   duration_seconds: number;
   video_url: string;
   timing_config: TimingConfig;
@@ -119,9 +116,6 @@ export interface Lecture {
 
 export interface LectureSummary {
   id: string;
-  title: string;
-  subject: string;
-  grade: string;
   duration_seconds: number;
   video_url: string;
   intervention_count: number;
