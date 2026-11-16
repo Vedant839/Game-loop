@@ -2,9 +2,9 @@ import React, { useState } from "react";
 import type { Intervention } from "../types";
 
 export interface ReviewIntervention extends Intervention {
-  confidence?: "high" | "medium";
-  review_state?: "auto" | "needs_review" | "approved";
-  evidence?: Array<{ source: string; ref?: string; quote?: string }>;
+  confidence?: "high" | "medium" | "low" | null;
+  review_state?: "auto" | "needs_review" | "approved" | null;
+  evidence?: Array<{ source: string; ref?: string | null; quote?: string | null }>;
 }
 
 interface ReviewListProps {

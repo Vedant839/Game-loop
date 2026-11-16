@@ -135,7 +135,7 @@ export async function approveCheckpoint(
   lectureId: string,
   interventionId: string,
   creatorToken: string
-): Promise<{ approved: boolean }> {
+): Promise<{ status: "approved"; intervention: import("./types").Intervention }> {
   const response = await fetchWithTimeout(
     `${getApiBaseUrl()}/api/studio/lectures/${encodeURIComponent(lectureId)}/checkpoints/${encodeURIComponent(interventionId)}/approve`,
     {
@@ -149,7 +149,7 @@ export async function approveCheckpoint(
     const errorData = (await response.json().catch(() => ({}))) as { detail?: string };
     throw new Error(errorData.detail ?? "Failed to approve checkpoint.");
   }
-  return (await response.json()) as { approved: boolean };
+  return (await response.json()) as { status: "approved"; intervention: import("./types").Intervention };
 }
 
 export async function approveAllFlagged(

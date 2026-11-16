@@ -2,12 +2,15 @@ import { useEffect, useState } from "react";
 import {
   ingestLecture,
   fetchPreflight,
+  approveCheckpoint,
+  approveAllFlagged,
   type IngestLecturePayload,
 } from "../api";
 import { readVideoDuration } from "../adapters/videoDuration";
 import type { Lecture } from "../types";
 import { PreflightReport, type PreflightReportData } from "./PreflightReport";
 import { ContextPanel } from "./ContextPanel";
+import { ReviewList } from "./ReviewList";
 import {
   calculateVisualAnalysisCost,
   analyzeWeakWindowsWithGemini,
@@ -88,6 +91,8 @@ export default function IngestPage({ onComplete, onCancel }: Props) {
   const [visualEvidence, setVisualEvidence] = useState<VisualEvidenceItem[]>([]);
   const [visualAnalysisStatus, setVisualAnalysisStatus] = useState<string | null>(null);
   const [preflightStatus, setPreflightStatus] = useState<"idle" | "checking" | "error">("idle");
+  const [createdLecture, setCreatedLecture] = useState<Lecture | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
   useEffect(() => {
     const hasCaptions = Boolean(captionFile || transcript.trim());
@@ -207,7 +212,8 @@ export default function IngestPage({ onComplete, onCancel }: Props) {
       }
 
       const lecture = await ingestLecture(payload, creatorToken, activeGeminiKey);
-      onComplete(lecture);
+      setCreatedLecture(lecture);
+      setStage("ready");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Lecture ingestion failed.");
       setStage("error");
@@ -219,6 +225,61 @@ export default function IngestPage({ onComplete, onCancel }: Props) {
     stage === "transcribing" ||
     stage === "visual_analysis" ||
     stage === "generating";
+
+  const handleApproveOne = async (checkpointId: string) => {
+    if (!createdLecture) return;
+    setReviewError(null);
+    try {
+      const result = await approveCheckpoint(createdLecture.id, checkpointId, creatorToken);
+      setCreatedLecture((current) => current && ({
+        ...current,
+        interventions: current.interventions.map((item) =>
+          item.id === checkpointId ? result.intervention : item
+        ),
+      }));
+    } catch (cause) {
+      setReviewError(cause instanceof Error ? cause.message : "Checkpoint approval failed.");
+    }
+  };
+
+  const handleApproveAll = async () => {
+    if (!createdLecture) return;
+    setReviewError(null);
+    try {
+      await approveAllFlagged(createdLecture.id, creatorToken);
+      setCreatedLecture((current) => current && ({
+        ...current,
+        interventions: current.interventions.map((item) =>
+          item.review_state === "needs_review" ? { ...item, review_state: "approved" } : item
+        ),
+      }));
+    } catch (cause) {
+      setReviewError(cause instanceof Error ? cause.message : "Checkpoint approval failed.");
+    }
+  };
+
+  if (createdLecture) {
+    return (
+      <section className="ingest-page" aria-labelledby="review-created-lecture-title">
+        <h2 id="review-created-lecture-title">Review generated checkpoints</h2>
+        <p>Review evidence and approve any medium-confidence checkpoints before starting a student session.</p>
+        <ReviewList
+          lectureId={createdLecture.id}
+          creatorToken={creatorToken}
+          checkpoints={createdLecture.interventions}
+          onApproveOne={handleApproveOne}
+          onApproveAllFlagged={handleApproveAll}
+        />
+        {reviewError && <p role="alert" className="error-message">{reviewError}</p>}
+        <div className="ingest-actions">
+          <button type="button" onClick={() => onComplete(createdLecture)} data-testid="continue-to-lecture">
+            Continue to lecture
+          </button>
+          <button type="button" onClick={onCancel}>Close</button>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="ingest-page" aria-labelledby="ingest-title">

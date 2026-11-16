@@ -70,6 +70,11 @@ export interface InterventionVariant {
 export interface Intervention {
   id: string;
   revision?: number;
+  concept_id?: string | null;
+  confidence?: "high" | "medium" | "low" | null;
+  review_state?: "auto" | "needs_review" | "approved" | null;
+  origin?: "generated" | "fallback" | "legacy" | null;
+  evidence?: Array<{ source: string; quote?: string | null; ref?: string | null }>;
   trigger_time: number;
   concept: string;
   difficulty: Difficulty;

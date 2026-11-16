@@ -169,6 +169,12 @@ class TestReviewStateAndApproval:
         assert target.review_state == "approved"
         assert target.revision == 1
 
+        created_session = client.post("/api/sessions", json={"lecture_id": lec.id})
+        assert created_session.status_code == 201
+        assert {item["id"] for item in created_session.json()["interventions"]} == {
+            "chk_auto", "chk_needs_review"
+        }
+
     def test_approve_flagged_approves_all_medium_confidence(self, creator_token_factory):
         db = get_database()
         headers = creator_token_factory("creator_appr_all")
@@ -210,6 +216,11 @@ class TestReviewStateAndApproval:
             headers=other_headers,
         )
         assert resp.status_code == 404
+        bulk_resp = client.post(
+            "/api/studio/lectures/lec_owner_creator/approve_flagged",
+            headers=other_headers,
+        )
+        assert bulk_resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------

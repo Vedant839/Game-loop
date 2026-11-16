@@ -47,6 +47,8 @@ describe("IngestPage", () => {
     fireEvent.change(screen.getByLabelText("Or paste transcript text"), { target: { value: "Vectors have magnitude and direction." } });
     fireEvent.click(screen.getByRole("button", { name: "Generate lecture" }));
 
+    expect(await screen.findByTestId("review-list")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("continue-to-lecture"));
     await waitFor(() => expect(onComplete).toHaveBeenCalledWith(lecture));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/api/creator/ingest/preflight"),
@@ -131,6 +133,8 @@ describe("IngestPage", () => {
     fireEvent.change(screen.getByTestId("input-chapters"), { target: { value: "00:00 Introduction" } });
     fireEvent.click(screen.getByRole("button", { name: "Generate lecture" }));
 
+    expect(await screen.findByTestId("review-list")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("continue-to-lecture"));
     await waitFor(() => expect(onComplete).toHaveBeenCalledWith(lecture));
     const ingestCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/api/creator/ingest"));
     expect(JSON.parse(String(ingestCall?.[1]?.body))).toMatchObject({
@@ -138,7 +142,58 @@ describe("IngestPage", () => {
     });
   });
 
-  it("automatically shows the unknown timestamped-captions hint without blocking generation", async () => {
+  it("mounts the review list and applies one and bulk approvals after ingest", async () => {
+    const flagged = {
+      id: "cp_review", revision: 1, trigger_time: 120, concept: "A reviewed concept",
+      difficulty: "Medium", type: "single_choice", question: "Which statement describes this concept?",
+      options: [{ id: "a", text: "Supported behavior" }], correct_answer: "a",
+      correct_feedback: "Correct", incorrect_feedback: "Try again", confidence: "medium",
+      review_state: "needs_review", evidence: [{ source: "creator_context", quote: "verified creator quote" }],
+    };
+    const lecture = {
+      id: "ingest_review", duration_seconds: 300,
+      video_url: "https://example.com/video.mp4", interventions: [
+        { ...flagged, id: "cp_auto", concept: "An automatic concept", confidence: "high", review_state: "auto" },
+        flagged,
+        { ...flagged, id: "cp_review2", concept: "Another reviewed concept" },
+      ],
+      timing_config: { min_trigger_gap: 90, tolerance: 2 }, transcript: [],
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/api/creator/ingest/preflight")) return jsonResponse(preflightFixture);
+      if (url.endsWith("/api/creator/ingest")) return jsonResponse(lecture, 201);
+      if (url.endsWith("/checkpoints/cp_review/approve")) {
+        return jsonResponse({ status: "approved", intervention: { ...flagged, review_state: "approved" } });
+      }
+      if (url.endsWith("/approve_flagged")) return jsonResponse({ approved_count: 1 });
+      return jsonResponse({}, 404);
+    });
+    const onComplete = vi.fn();
+    render(<IngestPage onComplete={onComplete} onCancel={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Creator token"), { target: { value: "creator-token" } });
+    fireEvent.change(screen.getByLabelText("Video URL"), { target: { value: "https://example.com/video.mp4" } });
+    fireEvent.change(screen.getByLabelText("Or paste transcript text"), { target: { value: "Review evidence." } });
+    fireEvent.click(screen.getByRole("button", { name: "Generate lecture" }));
+
+    expect(await screen.findByTestId("review-list")).toBeInTheDocument();
+    expect(screen.getAllByText("[creator_context]")).toHaveLength(3);
+    fireEvent.click(screen.getByTestId("btn-approve-cp_review"));
+    expect(await screen.findByTestId("badge-state-cp_review")).toHaveTextContent("approved");
+    expect(screen.getByTestId("badge-state-cp_review")).toHaveTextContent("approved");
+    fireEvent.click(screen.getByTestId("btn-approve-all"));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/approve_flagged"), expect.anything(),
+    ));
+
+    fireEvent.click(screen.getByTestId("continue-to-lecture"));
+    await waitFor(() => expect(onComplete).toHaveBeenCalled());
+    const completedLecture = onComplete.mock.calls[0][0];
+    expect(completedLecture.interventions.find((item: { id: string }) => item.id === "cp_review").revision).toBe(1);
+    expect(completedLecture.interventions.find((item: { id: string }) => item.id === "cp_review").review_state).toBe("approved");
+  });
+
+  it("does not block generation while preflight is still pending", async () => {
     const lecture = {
       id: "ingest_untimed", duration_seconds: 300,
       video_url: "https://example.com/video.mp4", interventions: [],
@@ -161,6 +216,8 @@ describe("IngestPage", () => {
 
     await screen.findByTestId("preflight-loading");
     fireEvent.click(screen.getByRole("button", { name: "Generate lecture" }));
+    expect(await screen.findByTestId("review-list")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("continue-to-lecture"));
     await waitFor(() => expect(onComplete).toHaveBeenCalledWith(lecture));
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("/api/creator/ingest/preflight"),
@@ -168,7 +225,26 @@ describe("IngestPage", () => {
     );
 
     releasePreflight();
+  });
+
+  it("shows the server hint for unknown untimed captions", async () => {
+    const lecture = {
+      id: "ingest_untimed", duration_seconds: 300,
+      video_url: "https://example.com/video.mp4", interventions: [],
+      timing_config: { min_trigger_gap: 90, tolerance: 2 }, transcript: [],
+    };
+    const fetchMock = mockApi(lecture);
+    render(<IngestPage onComplete={vi.fn()} onCancel={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Creator token"), { target: { value: "creator-token" } });
+    fireEvent.change(screen.getByLabelText("Video URL"), { target: { value: "https://example.com/video.mp4" } });
+    fireEvent.change(screen.getByLabelText("Or paste transcript text"), { target: { value: "Untimed transcript text." } });
+
     expect(await screen.findByTestId("suitability-badge")).toHaveTextContent("unknown");
     expect(screen.getByTestId("preflight-message")).toHaveTextContent("Timed SRT/VTT captions give better placement");
+    expect(screen.getByRole("button", { name: "Generate lecture" })).not.toBeDisabled();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/creator/ingest/preflight"),
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 });
