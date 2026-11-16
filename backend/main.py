@@ -11,10 +11,9 @@ from slowapi.errors import RateLimitExceeded
 import aiofiles
 import math
 import time
-from typing import Literal
 
 from backend.config import get_settings
-from backend.auth import optional_creator, require_creator
+from backend.auth import require_creator
 from backend.database import DatabaseUnavailableError, get_database
 from backend.lecture_sanitizer import sanitize_student_lecture
 from backend.schemas.lecture import Intervention, Lecture, LectureSummary, ResumptionPolicy, TimingConfig
@@ -41,11 +40,10 @@ from backend.schemas.session import (
     TabEventRequest,
     TabEventResponse,
 )
-from backend.services.lecture_service import get_lecture_service, _generate_for_lecture
-from backend.services.gemini_authoring_service import generate_interventions_with_gemini
+from backend.services.lecture_service import get_lecture_service
 from backend.services.gemini_client import GeminiClient, GeminiQuotaExceeded
 from backend.services.ingest_pipeline import PipelineFailure, run_understanding_pipeline
-from backend.services.checkpoint_generator import MIN_CHECKPOINT_GAP_SECONDS, checkpoint_count, enrich_generated_lecture
+from backend.services.checkpoint_generator import MIN_CHECKPOINT_GAP_SECONDS
 from backend.utils.captions import CaptionParseError, TranscriptValidationError, parse_srt, parse_vtt
 from backend.services.session_service import SessionError, get_session_service
 from backend.services.learner_service import get_learner_service
@@ -454,81 +452,6 @@ def edit_checkpoint(
         content_json=lecture.model_dump_json(),
     )
     return {"status": "updated", "intervention": target_intv.model_dump(mode="json")}
-
-
-@app.post("/api/lectures/{lecture_id}/generate_interventions", response_model=Lecture)
-@limiter.limit("10/minute", key_func=get_creator_rate_limit_key)
-def generate_interventions_for_lecture(
-    request: Request,
-    lecture_id: str,
-    max_count: int | None = None,
-    intensity: Literal["light", "standard", "intense"] = "standard",
-    creator: dict[str, str] | None = Depends(optional_creator),
-):
-    """Generate interventions for a lecture, grounded in its actual transcript content.
-
-    When a Gemini API key is configured, this calls Gemini with the full
-    transcript and video length to ground generated checkpoints in the lecture.
-
-    Falls back to a local deterministic generator when no API key is set.
-    The fallback is clearly flagged in the response via the X-Generation-Mode
-    response header so callers can distinguish the two paths.
-    """
-    service = get_lecture_service()
-    lecture_path = service.lectures_dir / f"{lecture_id}.json"
-    if not lecture_path.exists():
-        raise HTTPException(status_code=404, detail=f"Lecture '{lecture_id}' not found.")
-
-    canonical_lecture = service.get_lecture_by_file(lecture_path)
-    generation_lecture = canonical_lecture.model_copy(deep=True)
-    generation_lecture.interventions = []
-    generation_lecture.timing_config = TimingConfig(
-        min_trigger_gap=MIN_CHECKPOINT_GAP_SECONDS,
-        tolerance=min(generation_lecture.timing_config.tolerance, 2.0),
-    )
-    requested_count = max_count if max_count is not None else checkpoint_count(
-        generation_lecture.duration_seconds, intensity
-    )
-
-    x_gemini_key = request.headers.get("X-Gemini-Key")
-    api_key = (x_gemini_key or "").strip()
-    creator_supplied_key = bool(api_key)
-    if not api_key and settings.gemini_api_key is not None:
-        api_key = settings.gemini_api_key.get_secret_value()
-    # The bundled sample is intended for audience demos. Anonymous users may
-    # refresh it with deterministic checkpoints, but never trigger paid Gemini
-    # generation. Creator-authenticated users retain the normal Gemini path.
-    anonymous_sample = creator is None and service.is_sample_lecture(lecture_id)
-    if creator is None and not anonymous_sample:
-        raise HTTPException(status_code=401, detail="Creator token required")
-
-    if api_key and requested_count and not anonymous_sample:
-        db = get_database()
-        creator_id = creator["creator_id"]
-        gemini_client = GeminiClient(db=db, settings=settings)
-        try:
-            generated = generate_interventions_with_gemini(
-                lecture=generation_lecture,
-                api_key=api_key,
-                target_count=requested_count,
-                max_count=requested_count,
-                creator_id=creator_id,
-                db=db,
-                gemini_client=gemini_client,
-                enforce_monthly_cap=not creator_supplied_key,
-            )
-            generated = enrich_generated_lecture(generated, intensity)
-            service.set_runtime_lecture(generated)
-            return generated
-        except GeminiQuotaExceeded:
-            raise HTTPException(status_code=429, detail="Monthly Gemini token cap reached") from None
-        except RuntimeError:
-            raise HTTPException(status_code=502, detail="Gemini generation failed") from None
-
-    # No API key configured — fall back to deterministic generator
-    generated = _generate_for_lecture(generation_lecture, requested_count, intensity)
-    service.set_runtime_lecture(generated)
-    return generated
 
 
 @app.post("/api/sessions", response_model=SessionState, status_code=status.HTTP_201_CREATED)

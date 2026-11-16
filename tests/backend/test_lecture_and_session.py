@@ -1,13 +1,11 @@
 """Unit and integration tests for lecture validation and runtime session state machine."""
 
-import types
-
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.main import app, generate_interventions_for_lecture
+from backend.main import app
 from backend.schemas.lecture import Difficulty, Intervention, InterventionType, Lecture, Option, TimingConfig
-from backend.services.lecture_service import LectureService, get_lecture_service
+from backend.services.lecture_service import LectureService
 from backend.services.session_service import SessionError, SessionService
 
 client = TestClient(app)
@@ -44,127 +42,9 @@ def test_lecture_service_loads_canonical_sample_lecture() -> None:
     assert lecture.interventions[2].type.value == "multiple_selection"
 
 
-def test_anonymous_sample_generation_uses_local_fallback(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "backend.main.settings",
-        types.SimpleNamespace(gemini_api_key=types.SimpleNamespace(get_secret_value=lambda: "configured-key")),
-    )
-    monkeypatch.setattr(
-        "backend.main.generate_interventions_with_gemini",
-        lambda **_kwargs: pytest.fail("anonymous sample generation must not call Gemini"),
-    )
-
+def test_removed_transcript_direct_generation_route_returns_404() -> None:
     response = client.post("/api/lectures/math_sample_lecture/generate_interventions")
-
-    assert response.status_code == 200
-    assert response.json()["interventions"]
-
-
-def test_anonymous_imported_sample_generation_is_allowed() -> None:
-    response = client.post(
-        "/api/lectures/python_tutorial_for_beginners_pip_comments_types_basic_operations_pylenza_1/generate_interventions"
-    )
-
-    assert response.status_code == 200
-    assert response.json()["id"].startswith("python_tutorial_for_beginners")
-
-
-def test_generate_interventions_refreshes_runtime_lecture_without_old_interventions(monkeypatch) -> None:
-    lecture_service = get_lecture_service()
-    stale_lecture = lecture_service.get_lecture("math_sample_lecture")
-    assert stale_lecture is not None
-    stale_lecture = stale_lecture.model_copy(
-        update={
-            "interventions": [
-                Intervention(
-                    id="stale_int_1",
-                    trigger_time=15.0,
-                    concept="Old vector idea",
-                    difficulty=Difficulty.EASY,
-                    type=InterventionType.SINGLE_CHOICE,
-                    question="This is a stale question from a previous generation.",
-                    options=[
-                        Option(id="opt_a", text="Stale option A"),
-                        Option(id="opt_b", text="Stale option B"),
-                        Option(id="opt_c", text="Stale option C"),
-                        Option(id="opt_d", text="Stale option D"),
-                    ],
-                    correct_answer="opt_a",
-                    correct_feedback="Correct.",
-                    incorrect_feedback="Wrong.",
-                )
-            ]
-        },
-        deep=True,
-    )
-    lecture_service.set_runtime_lecture(stale_lecture)
-
-    captured: dict[str, list[Intervention]] = {}
-
-    def fake_generate(
-        lecture: Lecture,
-        api_key: str,
-        target_count: int,
-        max_count: int,
-        **_kwargs,
-    ) -> Lecture:
-        captured["before_generate"] = lecture.interventions
-        generated = lecture.model_copy(
-            update={
-                "interventions": [
-                    Intervention(
-                        id="fresh_int_1",
-                        trigger_time=30.0,
-                        concept="Fresh vector idea",
-                        difficulty=Difficulty.EASY,
-                        type=InterventionType.SINGLE_CHOICE,
-                        question="Which statement best matches the lecture's vector idea?",
-                        options=[
-                            Option(id="opt_a", text="Fresh option A"),
-                            Option(id="opt_b", text="Fresh option B"),
-                            Option(id="opt_c", text="Fresh option C"),
-                            Option(id="opt_d", text="Fresh option D"),
-                        ],
-                        correct_answer="opt_a",
-                        correct_feedback="Correct.",
-                        incorrect_feedback="Wrong.",
-                    )
-                ]
-            },
-            deep=True,
-        )
-        return generated
-
-    monkeypatch.setattr("backend.main.generate_interventions_with_gemini", fake_generate)
-    monkeypatch.setattr(
-        "backend.main.settings",
-        types.SimpleNamespace(
-            gemini_api_key=types.SimpleNamespace(get_secret_value=lambda: "test-key"),
-            creator_monthly_token_cap=500_000,
-        ),
-    )
-
-    from backend.database import get_database
-    from scripts.migrate import migrate_database
-    migrate_database(get_database().db_path)
-    from starlette.requests import Request
-    response = generate_interventions_for_lecture(
-        request=Request({
-            "type": "http",
-            "method": "POST",
-            "path": "/api/lectures/math_sample_lecture/generate_interventions",
-            "headers": [],
-            "client": ("testclient", 1234),
-            "server": ("testserver", 80),
-            "scheme": "http",
-            "query_string": b"",
-        }),
-        lecture_id="math_sample_lecture",
-        creator={"creator_id": "test_creator"},
-    )
-
-    assert response.interventions[0].concept == "Fresh vector idea"
-    assert captured["before_generate"] == []
+    assert response.status_code == 404
 
 
 def test_session_lifecycle_and_state_transitions() -> None:

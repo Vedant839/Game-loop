@@ -6,111 +6,84 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
-from starlette.requests import Request
-
+from fastapi.testclient import TestClient
 from backend import config
 from backend.database import get_database
-from backend.main import generate_interventions_for_lecture
+from backend.main import app
 from backend.services.evaluator_service import EvaluatorService, EvaluationOutput
 from backend.services.gemini_client import (
     GeminiClient,
     GeminiProviderError,
     GeminiQuotaExceeded,
 )
+from backend.services.lecture_service import LectureService
 from scripts.migrate import migrate_database
 
 
-def _request() -> Request:
-    return Request(
-        {
-            "type": "http",
-            "method": "POST",
-            "path": "/api/lectures/math_sample_lecture/generate_interventions",
-            "headers": [],
-            "client": ("testclient", 1234),
-            "server": ("testserver", 80),
-            "scheme": "http",
-            "query_string": b"",
-        }
-    )
+def _ingest_payload():
+    return {
+        "video_url": "https://example.com/quota-security.mp4",
+        "duration_seconds": 300,
+        "captions": "1\n00:00:01,000 --> 00:00:04,000\nA vector has magnitude and direction.",
+        "captions_format": "srt",
+        "intensity": "standard",
+    }
 
 
-def test_monthly_token_cap_blocks_gemini_call(monkeypatch):
+def test_monthly_token_cap_blocks_ingest_gemini_call(tmp_path, monkeypatch, creator_token_factory):
     migrate_database(get_database().db_path)
     db = get_database()
     db.creators.log_usage("existing", "creator_a", "old", "generation", 100)
-    monkeypatch.setenv("GEMINI_API_KEY", "quota-test-key")
     config.get_settings.cache_clear()
     import backend.main as main
-    monkeypatch.setattr(main, "settings", SimpleNamespace(
-        gemini_api_key=SimpleNamespace(get_secret_value=lambda: "quota-test-key"),
+    settings = SimpleNamespace(
+        gemini_api_key=SimpleNamespace(get_secret_value=lambda: "server-quota-key"),
         creator_monthly_token_cap=100,
-    ))
-
-    def invoke_through_client(**kwargs):
-        return kwargs["gemini_client"].generate_content(
-            api_key=kwargs["api_key"],
-            creator_id=kwargs["creator_id"],
-            lecture_id="math_sample_lecture",
-            event_type="lecture_generation",
-            model="fake-model",
-            contents="prompt",
-        )
-
-    monkeypatch.setattr(main, "generate_interventions_with_gemini", invoke_through_client)
-
-    with pytest.raises(HTTPException) as exc:
-        generate_interventions_for_lecture(
-            request=_request(),
-            lecture_id="math_sample_lecture",
-            creator={"creator_id": "creator_a"},
-        )
-    assert exc.value.status_code == 429
+    )
+    monkeypatch.setattr(main, "settings", settings)
+    monkeypatch.setattr(main, "get_lecture_service", lambda: LectureService(tmp_path / "lectures"))
+    client = GeminiClient(db=db, settings=settings, provider_factory=lambda **_kwargs: pytest.fail("quota must block provider"))
+    monkeypatch.setitem(app.dependency_overrides, main.get_gemini_client, lambda: client)
+    response = TestClient(app).post(
+        "/api/creator/ingest",
+        headers=creator_token_factory("creator_a"),
+        json=_ingest_payload(),
+    )
+    assert response.status_code == 429
 
 
-def test_simulated_gemini_failure_redacts_key_from_logs_and_response(monkeypatch, caplog):
+def test_ingest_provider_failure_redacts_key_from_logs_and_response(tmp_path, monkeypatch, caplog, creator_token_factory):
     migrate_database(get_database().db_path)
     secret = "simulated-provider-key-987"
-    monkeypatch.setenv("GEMINI_API_KEY", secret)
     config.get_settings.cache_clear()
     import backend.main as main
-    monkeypatch.setattr(main, "settings", SimpleNamespace(
-        gemini_api_key=SimpleNamespace(get_secret_value=lambda: secret),
-        creator_monthly_token_cap=500_000,
-    ))
+    settings = SimpleNamespace(gemini_api_key=None, creator_monthly_token_cap=500_000)
+    monkeypatch.setattr(main, "settings", settings)
+    service = LectureService(tmp_path / "lectures")
+    service.lectures_dir.mkdir(parents=True)
+    monkeypatch.setattr(main, "get_lecture_service", lambda: service)
 
-    def fail_with_key(**kwargs):
-        logging.getLogger("backend.services.gemini_authoring_service").warning("provider error echoed %s", secret)
-        class FakeModels:
-            def generate_content(self, **_provider_kwargs):
-                raise RuntimeError(f"provider failed using {secret}")
+    class FakeModels:
+        def generate_content(self, **_provider_kwargs):
+            raise RuntimeError(f"provider failed using {secret}")
 
-        kwargs["gemini_client"].provider_factory = lambda **_factory_kwargs: SimpleNamespace(
-            models=FakeModels()
-        )
-        return kwargs["gemini_client"].generate_content(
-            api_key=kwargs["api_key"],
-            creator_id=kwargs["creator_id"],
-            lecture_id="math_sample_lecture",
-            event_type="lecture_generation",
-            model="fake-model",
-            contents="prompt",
-        )
-
-    monkeypatch.setattr(main, "generate_interventions_with_gemini", fail_with_key)
+    client = GeminiClient(
+        db=get_database(), settings=settings,
+        provider_factory=lambda **_kwargs: SimpleNamespace(models=FakeModels()),
+    )
+    monkeypatch.setitem(app.dependency_overrides, main.get_gemini_client, lambda: client)
     with caplog.at_level(logging.WARNING):
-        with pytest.raises(HTTPException) as exc:
-            generate_interventions_for_lecture(
-                request=_request(),
-                lecture_id="math_sample_lecture",
-                creator={"creator_id": "creator_a"},
-            )
+        response = TestClient(app).post(
+            "/api/creator/ingest",
+            headers={**creator_token_factory("creator_a"), "X-Gemini-Key": secret},
+            json=_ingest_payload(),
+        )
 
-    assert exc.value.status_code == 502
+    assert response.status_code == 502
     assert secret not in caplog.text
-    assert secret not in str(exc.value.detail)
+    assert secret not in response.text
     assert get_database().creators.get_monthly_token_usage("creator_a") > 0
+    assert list(service.lectures_dir.glob("*.json")) == []
     config.get_settings.cache_clear()
 
 
