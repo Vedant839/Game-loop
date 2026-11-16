@@ -12,8 +12,10 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 # Default thresholds (configurable per §7.3.1)
-DEFAULT_STRONG_MIN_WPM: float = 60.0
-DEFAULT_STRONG_MIN_COVERAGE: float = 0.5
+# Tuned to preserve strong narration in the recorded Linux control while
+# still marking the Mary lecture's sparse windows weak.
+DEFAULT_STRONG_MIN_WPM: float = 40.0
+DEFAULT_STRONG_MIN_COVERAGE: float = 0.4
 WINDOW_SIZE_SECONDS: float = 30.0
 
 _NON_SPEECH_PATTERN = re.compile(
@@ -56,6 +58,7 @@ def analyze_transcript_quality(
     plain_text: str | None = None,
     strong_min_wpm: float = DEFAULT_STRONG_MIN_WPM,
     strong_min_coverage: float = DEFAULT_STRONG_MIN_COVERAGE,
+    window_size_seconds: float = WINDOW_SIZE_SECONDS,
 ) -> PreflightReport:
     """Analyze caption timing and word density across 30-second windows.
 
@@ -70,11 +73,12 @@ def analyze_transcript_quality(
     if not segments:
         text = plain_text or ""
         words = len(strip_non_speech(text).split())
-        num_windows = max(1, int(duration_seconds // WINDOW_SIZE_SECONDS) + (1 if duration_seconds % WINDOW_SIZE_SECONDS > 0 else 0))
+        window_size = max(1.0, window_size_seconds)
+        num_windows = max(1, int(duration_seconds // window_size) + (1 if duration_seconds % window_size > 0 else 0))
         windows = [
             WindowReport(
-                start_s=i * WINDOW_SIZE_SECONDS,
-                end_s=min((i + 1) * WINDOW_SIZE_SECONDS, duration_seconds),
+                start_s=i * window_size,
+                end_s=min((i + 1) * window_size, duration_seconds),
                 words=words // num_windows,
                 coverage=1.0,
                 verdict="strong",
@@ -130,7 +134,7 @@ def analyze_transcript_quality(
     windows: list[WindowReport] = []
     t = 0.0
     while t < duration_seconds:
-        window_end = min(t + WINDOW_SIZE_SECONDS, duration_seconds)
+        window_end = min(t + max(1.0, window_size_seconds), duration_seconds)
         window_dur = window_end - t
 
         # Calculate words and coverage within this window

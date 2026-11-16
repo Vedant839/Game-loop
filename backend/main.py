@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import datetime, timezone
 import uuid
 from typing import Any
@@ -43,6 +44,7 @@ from backend.schemas.session import (
 from backend.services.lecture_service import get_lecture_service, _generate_for_lecture
 from backend.services.gemini_authoring_service import generate_interventions_with_gemini
 from backend.services.gemini_client import GeminiClient, GeminiQuotaExceeded
+from backend.services.ingest_pipeline import PipelineFailure, run_understanding_pipeline
 from backend.services.checkpoint_generator import MIN_CHECKPOINT_GAP_SECONDS, checkpoint_count, enrich_generated_lecture
 from backend.utils.captions import CaptionParseError, TranscriptValidationError, parse_srt, parse_vtt
 from backend.services.session_service import SessionError, get_session_service
@@ -55,6 +57,7 @@ from backend.rate_limit import (
 )
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 app = FastAPI(title="game-loop API", version="0.1.0")
@@ -68,6 +71,11 @@ app.add_middleware(
     allow_methods=["GET", "POST", "HEAD", "OPTIONS"],
     allow_headers=["*"],
 )
+
+
+def get_gemini_client() -> GeminiClient:
+    """Dependency boundary so authoring tests can install a fake provider."""
+    return GeminiClient(db=get_database(), settings=settings)
 
 
 @app.exception_handler(DatabaseUnavailableError)
@@ -160,6 +168,7 @@ def ingest_lecture(
     payload: IngestLectureRequest,
     response: Response,
     creator: dict[str, str] = Depends(require_creator),
+    gemini_client: GeminiClient = Depends(get_gemini_client),
 ) -> Lecture:
     """Parse uploaded captions, author checkpoints, and save a creator lecture."""
     started_at = time.perf_counter()
@@ -191,33 +200,36 @@ def ingest_lecture(
         timing_config=TimingConfig(min_trigger_gap=MIN_CHECKPOINT_GAP_SECONDS, tolerance=2.0),
         interventions=[],
     )
-    max_count = checkpoint_count(payload.duration_seconds, payload.intensity)
     api_key = (request.headers.get("X-Gemini-Key") or "").strip()
     creator_supplied_key = bool(api_key)
     if not api_key and settings.gemini_api_key is not None:
         api_key = settings.gemini_api_key.get_secret_value()
-    if api_key and max_count:
-        db = get_database()
-        try:
-            lecture = generate_interventions_with_gemini(
-                lecture=lecture,
-                api_key=api_key,
-                target_count=max_count,
-                max_count=max_count,
-                creator_id=creator["creator_id"],
-                db=db,
-                gemini_client=GeminiClient(db=db, settings=settings),
-                enforce_monthly_cap=not creator_supplied_key,
-            )
-            lecture = enrich_generated_lecture(lecture, payload.intensity)
-            response.headers["X-Generation-Mode"] = "gemini"
-        except GeminiQuotaExceeded:
-            raise HTTPException(status_code=429, detail="Monthly Gemini token cap reached") from None
-        except RuntimeError:
-            raise HTTPException(status_code=502, detail="Gemini generation failed") from None
-    else:
-        lecture = _generate_for_lecture(lecture, max_count=max_count, intensity=payload.intensity)
-        response.headers["X-Generation-Mode"] = "deterministic"
+    try:
+        lecture = run_understanding_pipeline(
+            lecture,
+            intensity=payload.intensity,
+            api_key=api_key,
+            creator_id=creator["creator_id"],
+            gemini_client=gemini_client,
+            enforce_monthly_cap=not creator_supplied_key,
+            creator_context=payload.creator_context.model_dump(mode="json") if payload.creator_context else None,
+            visual_evidence=payload.visual_evidence,
+        )
+        response.headers["X-Generation-Mode"] = "concept_v2"
+    except GeminiQuotaExceeded:
+        raise HTTPException(status_code=429, detail="Monthly Gemini token cap reached") from None
+    except PipelineFailure as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={"code": "understanding_unavailable", "analysis_report": exc.analysis_report},
+        ) from None
+    except Exception as exc:
+        # Do not include provider exception details; they may contain prompt or key data.
+        logger.warning("Understanding pipeline failed (%s)", type(exc).__name__)
+        raise HTTPException(
+            status_code=502,
+            detail={"code": "understanding_unavailable", "analysis_report": lecture.analysis_report},
+        ) from None
 
     service = get_lecture_service()
     service.save_lecture(lecture)

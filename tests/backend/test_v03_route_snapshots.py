@@ -99,6 +99,6 @@ def test_v03_sessions_route_response_shape() -> None:
     assert response.status_code == 200
     assert set(response.json()) == {
         "session_id", "lecture_id", "version", "client_id", "external_user_id",
-        "active_intervention_id", "interventions",
+        "active_intervention_id", "interventions", "display_streak",
     }
     assert set(response.json()["interventions"][0]) == {"id", "trigger_time", "state", "policy"}

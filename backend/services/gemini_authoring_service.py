@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from backend.security_logging import add_api_key_redaction
 from backend.services.gemini_client import GeminiClient, GeminiQuotaExceeded
+from backend.services.gemini_models import AUTHORING_MODEL_NAME
 from backend.schemas.lecture import (
     Difficulty,
     Intervention,
@@ -36,7 +37,7 @@ logger = logging.getLogger(__name__)
 add_api_key_redaction(logger)
 
 SUPPORTED_GEMINI_MODELS = [
-    "gemini-3.8-flash",
+    AUTHORING_MODEL_NAME,
     "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite",
     "gemini-flash-lite-latest",

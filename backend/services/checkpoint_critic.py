@@ -23,6 +23,9 @@ import json
 import logging
 from typing import Any
 
+from backend.services.gemini_client import GeminiQuotaExceeded
+from backend.services.gemini_models import AUTHORING_MODEL_NAME
+
 logger = logging.getLogger(__name__)
 
 CRITIC_DROP_REASONS = frozenset({
@@ -118,6 +121,7 @@ def apply_critic_verdicts(
     verdicts: dict[str, str],
     *,
     report: dict | None = None,
+    reasons: dict[str, str] | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """Split checkpoints into (kept, dropped) based on critic verdicts.
 
@@ -134,7 +138,7 @@ def apply_critic_verdicts(
     for chk in checkpoints:
         chk_id = chk.get("id", "")
         if verdicts.get(chk_id, "keep") == "drop":
-            dropped.append(chk)
+            dropped.append({**chk, "_critic_reason": (reasons or {}).get(chk_id, "critic_rejected")})
         else:
             kept.append(chk)
 
@@ -151,13 +155,15 @@ def run_critic_with_gemini_client(
     api_key: str,
     creator_id: str,
     lecture_id: str,
-    model: str = "gemini-3.8-flash",
+    model: str = AUTHORING_MODEL_NAME,
     report: dict | None = None,
+    enforce_monthly_cap: bool = True,
+    failure_out: dict[str, bool] | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """Call Gemini with the critic prompt and apply verdicts.
 
-    Returns (kept, dropped). On any error, returns (checkpoints, []) so the
-    calling pipeline does not silently lose checkpoints due to a network issue.
+    Returns (kept, dropped). Provider or response failures keep the checkpoints
+    but are exposed through failure_out so callers can route them to review.
     """
     if not checkpoints:
         return [], []
@@ -174,13 +180,29 @@ def run_critic_with_gemini_client(
             model=model,
             contents=prompt,
             timeout_ms=30000,
-            enforce_monthly_cap=True,
+            enforce_monthly_cap=enforce_monthly_cap,
         )
         raw_text: str = getattr(response, "text", "") or ""
+        parsed = json.loads(raw_text)
+        raw_verdicts = parsed.get("verdicts")
+        if not isinstance(raw_verdicts, list):
+            raise ValueError("critic response is missing verdicts")
+        returned_ids = {str(item.get("id", "")) for item in raw_verdicts if isinstance(item, dict)}
+        if not set(expected_ids).issubset(returned_ids):
+            raise ValueError("critic response omitted checkpoint verdicts")
         verdicts = _parse_critic_response(raw_text, expected_ids)
+        reasons = {
+            str(item["id"]): str(item.get("reason", "critic_rejected"))
+            for item in raw_verdicts if isinstance(item, dict) and item.get("id") is not None
+        }
+    except GeminiQuotaExceeded:
+        raise
     except Exception:
-        logger.warning("Critic Gemini call failed; keeping all %d checkpoints", len(checkpoints))
+        logger.warning("Critic Gemini call failed; routing %d checkpoints to review", len(checkpoints))
+        if failure_out is not None:
+            failure_out["failed"] = True
         verdicts = {eid: "keep" for eid in expected_ids}
+        reasons = {}
 
-    return apply_critic_verdicts(checkpoints, verdicts, report=report)
+    return apply_critic_verdicts(checkpoints, verdicts, report=report, reasons=reasons)
 
