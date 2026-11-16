@@ -30,6 +30,7 @@ export default function InterventionOverlay({
   const isInquiry =
     intervention.type === "predict_and_verify" || intervention.type === "inquiry_sandbox";
   const isOpenEnded = intervention.type === "open_ended";
+  const isFallbackReflect = intervention.id.startsWith("fb_chk_");
 
   // MCQ state
   const [selectedSingle, setSelectedSingle] = useState<string>("");
@@ -106,12 +107,16 @@ export default function InterventionOverlay({
   const handleOpenEndedSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!openEndedText.trim() || isSubmitting || evaluationResult) return;
+    if (isFallbackReflect && openEndedText.trim().split(/\s+/).length < 5) {
+      setSubmitError("Please write at least five words.");
+      return;
+    }
 
     setIsSubmitting(true);
     setSubmitError(null);
 
     try {
-      if (onSubmitOpenEnded) {
+      if (onSubmitOpenEnded && !isFallbackReflect) {
         setIsEvaluatingOpenEnded(true);
         const resp = await onSubmitOpenEnded(openEndedText);
         setOpenEndedResponse(resp);
@@ -376,7 +381,7 @@ export default function InterventionOverlay({
                 <textarea
                   id="open-ended-input"
                   className="open-ended-textarea"
-                  placeholder="Explain your mathematical or conceptual reasoning step-by-step..."
+                  placeholder={isFallbackReflect ? "Write at least five words about what the last few minutes showed or taught..." : "Explain your mathematical or conceptual reasoning step-by-step..."}
                   value={openEndedText}
                   onChange={(e) => setOpenEndedText(e.target.value)}
                   disabled={isSubmitting}
@@ -412,9 +417,9 @@ export default function InterventionOverlay({
                   <button
                     type="submit"
                     className="submit-button"
-                    disabled={!openEndedText.trim() || isSubmitting}
+                    disabled={!openEndedText.trim() || (isFallbackReflect && openEndedText.trim().split(/\s+/).length < 5) || isSubmitting}
                   >
-                    {isSubmitting ? "Submitting..." : "Submit for Evaluation"}
+                    {isSubmitting ? "Submitting..." : isFallbackReflect ? "Save reflection" : "Submit for Evaluation"}
                   </button>
                 </div>
               </form>

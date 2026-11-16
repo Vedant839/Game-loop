@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from backend.config import MAX_UNCHECKED_GAP_S
 
 from backend.schemas.lecture import (
     Difficulty,
@@ -16,7 +17,7 @@ from backend.schemas.lecture import (
 
 SPACING_SECONDS = {"light": 330.0, "standard": 210.0, "intense": 150.0}
 MIN_CHECKPOINT_GAP_SECONDS = 90.0
-MAX_UNCHECKED_GAP_SECONDS = 480.0
+MAX_UNCHECKED_GAP_SECONDS = MAX_UNCHECKED_GAP_S
 
 
 def checkpoint_count(duration_seconds: float, intensity: str) -> int:
@@ -152,7 +153,8 @@ def insert_fallback_reflections(
     result = lecture.model_copy(deep=True)
     interventions = sorted(result.interventions, key=lambda x: x.trigger_time)
 
-    boundary_times = [0.0] + [i.trigger_time for i in interventions] + [lecture.duration_seconds]
+    # The rule applies to gaps between placed checkpoints, not the lead-in or tail.
+    boundary_times = [i.trigger_time for i in interventions]
     new_reflections: list[Intervention] = []
 
     fb_counter = 1

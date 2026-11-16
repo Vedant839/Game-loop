@@ -17,6 +17,7 @@ from backend.schemas.lecture import Lecture, Intervention, Difficulty, Intervent
 from backend.utils.chapters import parse_chapters
 from backend.utils.visual_evidence import validate_visual_evidence
 from backend.services.checkpoint_generator import insert_fallback_reflections, MAX_UNCHECKED_GAP_SECONDS
+from scripts.migrate import migrate_database
 
 client = TestClient(app)
 
@@ -270,6 +271,81 @@ class TestFallbackReflections:
         assert fb.rubric is None
         assert fb.type.value == "open_ended"
         assert "In your own words" in fb.question
+        assert fb.id.startswith("fb_chk_")
+        assert fb.review_state == "auto"
+        assert fb.confidence == "high"
+        assert fb.concept_id is None
+        assert fb.evidence is None
+        assert fb.policy.value == "skippable"
+
+    def test_weak_window_without_surviving_concepts_does_not_create_checkpoint(self):
+        lec = Lecture(
+            id="no_concept_lec", duration_seconds=1200.0,
+            video_url="https://example.com/video.mp4",
+            timing_config=TimingConfig(min_trigger_gap=15.0, tolerance=2.0),
+            interventions=[],
+        )
+        result = insert_fallback_reflections(
+            lec, weak_windows=[{"start_s": 300.0, "end_s": 700.0}],
+        )
+        assert result.interventions == []
+
+    def test_long_lead_in_or_tail_is_not_a_gap_between_placed_checkpoints(self):
+        lec = Lecture(
+            id="edge_gap_lec", duration_seconds=1200.0,
+            video_url="https://example.com/video.mp4",
+            timing_config=TimingConfig(min_trigger_gap=15.0, tolerance=2.0),
+            interventions=[Intervention(
+                id="chk_1", trigger_time=700.0, concept="C1",
+                difficulty=Difficulty.EASY, type=InterventionType.SINGLE_CHOICE,
+                question="Q1?", options=[{"id": "a", "text": "A"}, {"id": "b", "text": "B"}],
+                correct_answer="a",
+            )],
+        )
+        result = insert_fallback_reflections(
+            lec, weak_windows=[{"start_s": 100.0, "end_s": 500.0}],
+        )
+        assert len(result.interventions) == 1
+
+    def test_fallback_reflection_requires_five_words_and_does_not_grade(self):
+        db = get_database()
+        migrate_database(db.db_path)
+        lecture = Lecture(
+            id="fallback_runtime", duration_seconds=600.0,
+            video_url="https://example.com/video.mp4",
+            timing_config=TimingConfig(min_trigger_gap=15.0, tolerance=2.0),
+            interventions=[Intervention(
+                id="fb_chk_1", trigger_time=120.0, concept="Reflection",
+                difficulty=Difficulty.EASY, type=InterventionType.OPEN_ENDED,
+                question="In your own words, what did the last few minutes show or teach?",
+                origin="fallback", review_state="auto", confidence="high",
+            )],
+        )
+        db.lectures.save_lecture(
+            lecture_id=lecture.id, creator_id="fallback_test", title="Fallback",
+            video_url=lecture.video_url, source_type="direct",
+            content_json=lecture.model_dump_json(),
+        )
+        created = client.post("/api/sessions", json={"lecture_id": lecture.id})
+        assert created.status_code == 201
+        session_id = created.json()["session_id"]
+        active = client.post(
+            f"/api/sessions/{session_id}/activate",
+            json={"intervention_id": "fb_chk_1", "playback_position": 120.0},
+        )
+        assert active.status_code == 200
+        too_short = client.post(
+            f"/api/sessions/{session_id}/submit",
+            json={"intervention_id": "fb_chk_1", "idempotency_key": "short", "answer": "just four simple words"},
+        )
+        assert too_short.status_code == 422
+        saved = client.post(
+            f"/api/sessions/{session_id}/submit",
+            json={"intervention_id": "fb_chk_1", "idempotency_key": "enough", "answer": "These are five reflection words"},
+        )
+        assert saved.status_code == 200
+        assert saved.json()["mastery_delta"] == 0.0
+        assert saved.json()["is_correct"] is True
 
     def test_no_fallback_when_gap_is_small(self):
         lec = Lecture(

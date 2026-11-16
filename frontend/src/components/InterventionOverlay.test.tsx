@@ -56,6 +56,35 @@ describe("InterventionOverlay", () => {
     expect(submitBtn.disabled).toBe(false);
   });
 
+  it("requires five words for a fallback reflection", () => {
+    const fallback: ActiveInterventionPayload = {
+      ...mockSingleChoiceIntervention,
+      id: "fb_chk_1",
+      type: "open_ended",
+      question: "In your own words, what did the last few minutes show or teach?",
+      options: [],
+      session_state: {
+        ...mockSingleChoiceIntervention.session_state,
+        active_intervention_id: "fb_chk_1",
+        interventions: [{ id: "fb_chk_1", trigger_time: 25, state: "ACTIVE" }],
+      },
+    };
+    render(
+      <InterventionOverlay
+        intervention={fallback}
+        onSubmit={vi.fn()}
+        onFeedbackComplete={vi.fn()}
+      />,
+    );
+    const submit = screen.getByRole("button", { name: "Save reflection" }) as HTMLButtonElement;
+    const textarea = screen.getByRole("textbox");
+    expect(submit.disabled).toBe(true);
+    fireEvent.change(textarea, { target: { value: "one two three four" } });
+    expect(submit.disabled).toBe(true);
+    fireEvent.change(textarea, { target: { value: "one two three four five" } });
+    expect(submit.disabled).toBe(false);
+  });
+
   it("submits selected answer and displays feedback result", async () => {
     const mockEvalResult: EvaluationResult = {
       is_correct: true,

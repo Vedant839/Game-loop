@@ -19,7 +19,7 @@ from backend.schemas.lecture import (
     ResumptionPolicy,
 )
 from backend.services.checkpoint_critic import run_critic_with_gemini_client
-from backend.services.checkpoint_generator import checkpoint_count
+from backend.services.checkpoint_generator import checkpoint_count, insert_fallback_reflections
 from backend.services.concept_service import (
     Concept,
     build_concept_extraction_prompt,
@@ -518,6 +518,11 @@ def run_understanding_pipeline(
         for concept in concepts
     ]
     output.interventions = sorted(interventions, key=lambda item: item.trigger_time)
+    before_fallback = len(output.interventions)
+    output = insert_fallback_reflections(
+        output, weak_windows=weak_spans,
+    )
+    generation["fallback_reflect"] = len(output.interventions) - before_fallback
     output.recall_pool = []
     output.analysis_report = report
     output.creator_context = creator_context

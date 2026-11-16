@@ -73,7 +73,6 @@ export interface Intervention {
   concept_id?: string | null;
   confidence?: "high" | "medium" | "low" | null;
   review_state?: "auto" | "needs_review" | "approved" | null;
-  origin?: "generated" | "fallback" | "legacy" | null;
   evidence?: Array<{ source: string; quote?: string | null; ref?: string | null }>;
   trigger_time: number;
   concept: string;
@@ -95,6 +94,7 @@ export interface Intervention {
   variants?: Record<number, InterventionVariant>;
   policy?: InterventionPolicy;
   resumption_policy?: ResumptionPolicy;
+  origin?: "generated" | "fallback" | "legacy" | null;
   rubric?: RubricConfig | null;
 }
 

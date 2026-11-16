@@ -448,6 +448,23 @@ class SessionService:
         tier = session.active_intervention_tier
         variant = target_intv.variants.get(tier) if getattr(target_intv, "variants", None) else None
 
+        if target_intv.origin == "fallback" and target_intv.id.startswith("fb_chk_"):
+            reflection = answer.strip() if isinstance(answer, str) else ""
+            if len(reflection.split()) < 5:
+                raise SessionError("Reflection must contain at least five words.", status_code=422)
+            session.interventions_state[intervention_id] = InterventionStateEnum.COMPLETED
+            session.active_intervention_id = None
+            session.version += 1
+            result = EvaluationResult(
+                is_correct=True, feedback="Reflection recorded.", submitted_answer=reflection,
+                session_state=session.get_state(), tier=tier, mastery_delta=0.0,
+                suggested_next_tier=tier,
+            )
+            session.completed_submissions[idempotency_key] = result
+            self._persist_session(session, intervention_ids={intervention_id},
+                                  completed_submission_keys={idempotency_key})
+            return result
+
         # Deterministic evaluation
         is_correct = False
         if target_intv.type == InterventionType.SINGLE_CHOICE:
