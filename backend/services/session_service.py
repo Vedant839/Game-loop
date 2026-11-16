@@ -181,10 +181,17 @@ class SessionService:
         if not lecture:
             raise SessionError(f"Lecture '{lecture_id}' not found.", status_code=404)
 
+        # Omit interventions with review_state == "needs_review" from new student sessions
+        session_lecture = lecture.model_copy(deep=True)
+        session_lecture.interventions = [
+            intv for intv in lecture.interventions
+            if getattr(intv, "review_state", "auto") != "needs_review"
+        ]
+
         session_id = str(uuid.uuid4())
         session = RuntimeSession(
             session_id=session_id,
-            lecture=lecture,
+            lecture=session_lecture,
             client_id=client_id,
             external_user_id=external_user_id,
             tier_override=tier_override,

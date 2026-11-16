@@ -1,0 +1,45 @@
+{
+  "generator_version": 1,
+  "note": "Bad checkpoints from transcript-direct generation. P1.5.1 must reject all of these.",
+  "checkpoints": [
+    {
+      "id": "bad_1",
+      "question": "Which of the following was mentioned in the lecture?",
+      "options": [
+        "mary",
+        "greet",
+        "hello",
+        "print"
+      ],
+      "correct_answer": "mary",
+      "concept": "example variable name",
+      "failure_reason": "banned_stem: 'mentioned in the lecture' + incidental_detail"
+    },
+    {
+      "id": "bad_2",
+      "question": "According to the instructor, what name was used in the greet example?",
+      "options": [
+        "mary",
+        "alice",
+        "bob",
+        "jane"
+      ],
+      "correct_answer": "mary",
+      "concept": "example variable name",
+      "failure_reason": "banned_stem: 'according to the instructor' + incidental_detail"
+    },
+    {
+      "id": "bad_3",
+      "question": "What did the instructor say was printed when greet was called?",
+      "options": [
+        "hello mary",
+        "goodbye mary",
+        "hi mary",
+        "hey mary"
+      ],
+      "correct_answer": "hello mary",
+      "concept": "print output of illustrative example",
+      "failure_reason": "banned_stem: 'instructor say' + tests incidental illustration value"
+    }
+  ]
+}

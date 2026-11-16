@@ -92,6 +92,84 @@ export interface IngestLecturePayload {
   captions: string;
   captions_format: "srt" | "vtt" | "text";
   intensity: "light" | "standard" | "intense";
+  creator_context?: {
+    notes?: string;
+    chapters?: string;
+  };
+  visual_evidence?: Array<{
+    id: string;
+    start_s: number;
+    end_s: number;
+    description: string;
+    code?: string | null;
+  }>;
+}
+
+export interface PreflightPayload {
+  captions?: string;
+  captions_format?: "srt" | "vtt" | "text";
+  plain_text?: string;
+  duration_seconds: number;
+}
+
+export async function fetchPreflight(
+  payload: PreflightPayload,
+  creatorToken: string
+): Promise<import("./studio/PreflightReport").PreflightReportData> {
+  const response = await fetchWithTimeout(`${getApiBaseUrl()}/api/creator/ingest/preflight`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${creatorToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const errorData = (await response.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(errorData.detail ?? "Preflight quality check failed.");
+  }
+  return (await response.json()) as import("./studio/PreflightReport").PreflightReportData;
+}
+
+export async function approveCheckpoint(
+  lectureId: string,
+  interventionId: string,
+  creatorToken: string
+): Promise<{ approved: boolean }> {
+  const response = await fetchWithTimeout(
+    `${getApiBaseUrl()}/api/studio/lectures/${encodeURIComponent(lectureId)}/checkpoints/${encodeURIComponent(interventionId)}/approve`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${creatorToken}`,
+      },
+    }
+  );
+  if (!response.ok) {
+    const errorData = (await response.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(errorData.detail ?? "Failed to approve checkpoint.");
+  }
+  return (await response.json()) as { approved: boolean };
+}
+
+export async function approveAllFlagged(
+  lectureId: string,
+  creatorToken: string
+): Promise<{ approved_count: number }> {
+  const response = await fetchWithTimeout(
+    `${getApiBaseUrl()}/api/studio/lectures/${encodeURIComponent(lectureId)}/approve_flagged`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${creatorToken}`,
+      },
+    }
+  );
+  if (!response.ok) {
+    const errorData = (await response.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(errorData.detail ?? "Failed to approve all flagged checkpoints.");
+  }
+  return (await response.json()) as { approved_count: number };
 }
 
 export async function ingestLecture(

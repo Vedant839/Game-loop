@@ -200,3 +200,30 @@ class SessionRepository(BaseRepository):
                 )
             return [dict(row) for row in cursor.fetchall()]
 
+    def save_study_guide(
+        self, guide_id: str, session_id: str, content_md: str
+    ) -> None:
+        """Persist or update compiled study guide."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self.db.connection() as conn:
+            conn.execute(
+                """INSERT INTO study_guides (guide_id, session_id, content_md, generated_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT(session_id) DO UPDATE SET
+                       content_md = excluded.content_md,
+                       updated_at = excluded.updated_at""",
+                (guide_id, session_id, content_md, now, now),
+            )
+
+    def get_study_guide(self, session_id: str) -> dict[str, Any] | None:
+        """Fetch study guide by session_id."""
+        with self.db.connection() as conn:
+            cursor = conn.execute(
+                """SELECT guide_id, session_id, content_md, generated_at, updated_at
+                   FROM study_guides WHERE session_id = ?""",
+                (session_id,),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+

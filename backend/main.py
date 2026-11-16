@@ -16,8 +16,9 @@ from backend.config import get_settings
 from backend.auth import optional_creator, require_creator
 from backend.database import DatabaseUnavailableError, get_database
 from backend.lecture_sanitizer import sanitize_student_lecture
-from backend.schemas.lecture import Lecture, LectureSummary, ResumptionPolicy, TimingConfig
-from backend.schemas.ingest import IngestLectureRequest
+from backend.schemas.lecture import Intervention, Lecture, LectureSummary, ResumptionPolicy, TimingConfig
+from backend.schemas.ingest import IngestLectureRequest, PreflightRequest
+from backend.services.transcript_quality import PreflightReport, analyze_transcript_quality
 from backend.schemas.session import (
     ActivateInterventionRequest,
     ActiveInterventionPayload,
@@ -116,6 +117,40 @@ def create_lecture(
         content_json=lecture.model_dump_json(),
     )
     return lecture
+
+
+@app.post("/api/creator/ingest/preflight", response_model=PreflightReport)
+@limiter.limit("120/minute", key_func=get_creator_rate_limit_key)
+def preflight_transcript_quality(
+    request: Request,
+    payload: PreflightRequest,
+    creator: dict[str, str] = Depends(require_creator),
+) -> PreflightReport:
+    """Analyze caption timing and word density deterministically without external calls."""
+    segments: list[dict[str, Any]] = []
+    plain_text: str | None = None
+
+    if payload.transcript:
+        segments = payload.transcript
+    elif payload.captions and payload.captions.strip():
+        if payload.captions_format == "srt":
+            try:
+                segments = [seg.model_dump() for seg in parse_srt(payload.captions)]
+            except Exception:
+                plain_text = payload.captions
+        elif payload.captions_format == "vtt":
+            try:
+                segments = [seg.model_dump() for seg in parse_vtt(payload.captions)]
+            except Exception:
+                plain_text = payload.captions
+        else:
+            plain_text = payload.captions
+
+    return analyze_transcript_quality(
+        segments=segments if segments else None,
+        duration_seconds=payload.duration_seconds,
+        plain_text=plain_text,
+    )
 
 
 @app.post("/api/creator/ingest", response_model=Lecture, status_code=status.HTTP_201_CREATED)
@@ -224,6 +259,13 @@ def list_lectures() -> list[LectureSummary]:
 @app.get("/api/lectures/{lecture_id}")
 def get_lecture(lecture_id: str) -> dict[str, Any]:
     """Return the student-safe lecture view by ID."""
+    try:
+        stored = get_database().lectures.get_lecture(lecture_id)
+        if stored and stored.get("content"):
+            content_data = json.loads(stored["content"])
+            return sanitize_student_lecture(content_data)
+    except Exception:
+        pass
     service = get_lecture_service()
     lecture = service.get_lecture(lecture_id)
     if not lecture:
@@ -239,6 +281,13 @@ def get_session_lecture(session_id: str) -> dict[str, Any]:
         session = session_service._get_or_load_session(session_id)
     except SessionError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+    try:
+        stored = get_database().lectures.get_lecture(session.lecture.id)
+        if stored and stored.get("content"):
+            content_data = json.loads(stored["content"])
+            return sanitize_student_lecture(content_data)
+    except Exception:
+        pass
     return sanitize_student_lecture(session.lecture.model_dump(mode="json"))
 
 
@@ -276,6 +325,123 @@ def get_studio_lecture(
     if not lecture:
         raise HTTPException(status_code=404, detail=f"Lecture '{lecture_id}' not found.")
     return lecture
+
+
+@app.post("/api/studio/lectures/{lecture_id}/checkpoints/{intervention_id}/approve")
+@limiter.limit("120/minute", key_func=get_creator_rate_limit_key)
+def approve_checkpoint(
+    request: Request,
+    lecture_id: str,
+    intervention_id: str,
+    creator: dict[str, str] = Depends(require_creator),
+) -> dict[str, Any]:
+    """Approve a flagged checkpoint without changing its revision (§7.3.7)."""
+    db = get_database()
+    stored = db.lectures.get_lecture(lecture_id)
+    if not stored or stored["creator_id"] != creator["creator_id"]:
+        raise HTTPException(status_code=404, detail=f"Lecture '{lecture_id}' not found.")
+
+    lecture = Lecture.model_validate_json(stored["content"])
+    found = False
+    target_intv = None
+    for intv in lecture.interventions:
+        if intv.id == intervention_id:
+            intv.review_state = "approved"
+            target_intv = intv
+            found = True
+            break
+
+    if not found:
+        raise HTTPException(status_code=404, detail=f"Checkpoint '{intervention_id}' not found.")
+
+    db.lectures.save_lecture(
+        lecture_id=lecture.id,
+        creator_id=creator["creator_id"],
+        title=stored.get("title", lecture.id),
+        video_url=lecture.video_url,
+        source_type=stored.get("source_type", "direct"),
+        content_json=lecture.model_dump_json(),
+    )
+    return {"status": "approved", "intervention": target_intv.model_dump(mode="json")}
+
+
+@app.post("/api/studio/lectures/{lecture_id}/approve_flagged")
+@limiter.limit("120/minute", key_func=get_creator_rate_limit_key)
+def approve_all_flagged_checkpoints(
+    request: Request,
+    lecture_id: str,
+    creator: dict[str, str] = Depends(require_creator),
+) -> dict[str, Any]:
+    """Approve all checkpoints with review_state == 'needs_review' (§7.3.7)."""
+    db = get_database()
+    stored = db.lectures.get_lecture(lecture_id)
+    if not stored or stored["creator_id"] != creator["creator_id"]:
+        raise HTTPException(status_code=404, detail=f"Lecture '{lecture_id}' not found.")
+
+    lecture = Lecture.model_validate_json(stored["content"])
+    approved_count = 0
+    for intv in lecture.interventions:
+        if getattr(intv, "review_state", "auto") == "needs_review":
+            intv.review_state = "approved"
+            approved_count += 1
+
+    if approved_count > 0:
+        db.lectures.save_lecture(
+            lecture_id=lecture.id,
+            creator_id=creator["creator_id"],
+            title=stored.get("title", lecture.id),
+            video_url=lecture.video_url,
+            source_type=stored.get("source_type", "direct"),
+            content_json=lecture.model_dump_json(),
+        )
+
+    return {"approved_count": approved_count}
+
+
+@app.put("/api/studio/lectures/{lecture_id}/checkpoints/{intervention_id}")
+@limiter.limit("120/minute", key_func=get_creator_rate_limit_key)
+def edit_checkpoint(
+    request: Request,
+    lecture_id: str,
+    intervention_id: str,
+    payload: dict[str, Any],
+    creator: dict[str, str] = Depends(require_creator),
+) -> dict[str, Any]:
+    """Edit a checkpoint: sets review_state to 'approved' and increments revision (§7.2, §7.3.7)."""
+    db = get_database()
+    stored = db.lectures.get_lecture(lecture_id)
+    if not stored or stored["creator_id"] != creator["creator_id"]:
+        raise HTTPException(status_code=404, detail=f"Lecture '{lecture_id}' not found.")
+
+    lecture = Lecture.model_validate_json(stored["content"])
+    found = False
+    target_intv = None
+    for idx, intv in enumerate(lecture.interventions):
+        if intv.id == intervention_id:
+            data = intv.model_dump(mode="json")
+            for key in ("question", "trigger_time", "options", "hints", "correct_answer", "policy", "concept"):
+                if key in payload:
+                    data[key] = payload[key]
+            data["revision"] = data.get("revision", 1) + 1
+            data["review_state"] = "approved"
+            updated = Intervention.model_validate(data)
+            lecture.interventions[idx] = updated
+            target_intv = updated
+            found = True
+            break
+
+    if not found:
+        raise HTTPException(status_code=404, detail=f"Checkpoint '{intervention_id}' not found.")
+
+    db.lectures.save_lecture(
+        lecture_id=lecture.id,
+        creator_id=creator["creator_id"],
+        title=stored.get("title", lecture.id),
+        video_url=lecture.video_url,
+        source_type=stored.get("source_type", "direct"),
+        content_json=lecture.model_dump_json(),
+    )
+    return {"status": "updated", "intervention": target_intv.model_dump(mode="json")}
 
 
 @app.post("/api/lectures/{lecture_id}/generate_interventions", response_model=Lecture)

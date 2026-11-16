@@ -1,0 +1,73 @@
+{
+  "id": "mary_test_fixture",
+  "duration_seconds": 600.0,
+  "video_url": "https://example.com/mary_lecture.mp4",
+  "timing_config": {
+    "min_trigger_gap": 15.0,
+    "tolerance": 2.0
+  },
+  "transcript": [
+    {
+      "start_time": 0.0,
+      "end_time": 30.0,
+      "text": "Today we will look at Python functions."
+    },
+    {
+      "start_time": 30.0,
+      "end_time": 60.0,
+      "text": "Let's say we have a function called greet. We pass it a name, and it prints hello. For example, greet('mary') prints hello mary."
+    },
+    {
+      "start_time": 60.0,
+      "end_time": 90.0,
+      "text": "The parameter here is just a placeholder. It could be called anything."
+    },
+    {
+      "start_time": 90.0,
+      "end_time": 120.0,
+      "text": "Now let us look at return values. A function can return a result instead of just printing."
+    },
+    {
+      "start_time": 120.0,
+      "end_time": 180.0,
+      "text": "Using return, the function sends a value back to the caller. This is more flexible than print."
+    },
+    {
+      "start_time": 180.0,
+      "end_time": 240.0,
+      "text": "You can assign the returned value to a variable and use it later."
+    },
+    {
+      "start_time": 240.0,
+      "end_time": 300.0,
+      "text": "Default parameters let you define a fallback value. If the caller does not pass an argument, the default is used."
+    },
+    {
+      "start_time": 300.0,
+      "end_time": 360.0,
+      "text": "Keyword arguments allow you to pass values by name rather than position, making calls more readable."
+    },
+    {
+      "start_time": 360.0,
+      "end_time": 420.0,
+      "text": "Scope is about where a variable is visible. Variables inside a function are local by default."
+    },
+    {
+      "start_time": 420.0,
+      "end_time": 480.0,
+      "text": "The global keyword lets a function modify a variable defined outside. Use it sparingly."
+    },
+    {
+      "start_time": 480.0,
+      "end_time": 540.0,
+      "text": "Lambda expressions create small anonymous functions inline, useful for short callbacks."
+    },
+    {
+      "start_time": 540.0,
+      "end_time": 600.0,
+      "text": "That covers the basics of functions in Python. Practice by writing your own."
+    }
+  ],
+  "interventions": [],
+  "recall_pool": []
+}

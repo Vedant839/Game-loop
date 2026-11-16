@@ -20,6 +20,16 @@ PRIVATE_RESPONSE_FIELDS = {
     "hints",
     "solution_code",
     "recall_pool",
+    # P1.5 Rev 8.0 content-understanding internal fields
+    "concepts",
+    "analysis_report",
+    "creator_context",
+    "visual_evidence",
+    "generator_version",
+    "evidence",
+    "confidence",
+    "review_state",
+    "origin",
 }
 
 

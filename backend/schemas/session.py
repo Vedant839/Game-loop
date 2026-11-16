@@ -48,6 +48,7 @@ class SessionState(BaseModel):
     external_user_id: str | None = None
     active_intervention_id: str | None = None
     interventions: list[InterventionSessionState]
+    display_streak: int = 0
 
 
 class CreateSessionRequest(BaseModel):
@@ -69,6 +70,13 @@ class SubmitAnswerRequest(BaseModel):
     idempotency_key: str = Field(..., min_length=1)
     answer: str | list[str]
     expected_version: int | None = None
+    reflect_text: str | None = None
+
+
+class StudyGuideResponse(BaseModel):
+    session_id: str
+    content_md: str
+    generated_at: str
 
 
 class HintRequest(BaseModel):
@@ -104,6 +112,7 @@ class EvaluationResult(BaseModel):
     tier: int = 1
     mastery_delta: float = 0.0
     suggested_next_tier: int = 1
+    display_streak: int = 0
 
 
 class ActiveInterventionPayload(BaseModel):

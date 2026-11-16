@@ -106,6 +106,12 @@ class Intervention(BaseModel):
     policy: InterventionPolicy = InterventionPolicy.SKIPPABLE
     resumption_policy: ResumptionPolicy = ResumptionPolicy.IMMEDIATE_OPTIMISTIC
     rubric: RubricConfig | None = None
+    # V0.4 P1.5 Content Understanding Extensions
+    concept_id: str | None = None
+    evidence: list[dict[str, Any]] | None = None
+    confidence: str | None = None
+    review_state: str = "auto"
+    origin: str = "generated"
 
 
     @model_validator(mode="after")
@@ -185,6 +191,12 @@ class Lecture(BaseModel):
     transcript: list[TranscriptSegment] = Field(default_factory=list)
     interventions: list[Intervention] = Field(default_factory=list)
     recall_pool: list[dict[str, Any]] = Field(default_factory=list)
+    # V0.4 P1.5 Content Understanding Extensions
+    generator_version: int = Field(default=1)
+    concepts: list[dict[str, Any]] = Field(default_factory=list)
+    analysis_report: dict[str, Any] = Field(default_factory=dict)
+    creator_context: dict[str, Any] | None = None
+    visual_evidence: list[dict[str, Any]] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_lecture_constraints(self) -> "Lecture":

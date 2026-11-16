@@ -1,8 +1,23 @@
 """Creator ingestion request models."""
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
+
+
+MAX_CREATOR_CONTEXT_BYTES: int = 100 * 1024  # 100 KB limit
+
+
+class CreatorContext(BaseModel):
+    notes: str = ""
+    chapters: str = ""
+
+    @field_validator("notes")
+    @classmethod
+    def validate_notes_size(cls, v: str) -> str:
+        if len(v.encode("utf-8")) > MAX_CREATOR_CONTEXT_BYTES:
+            raise ValueError("Creator context notes exceed 100 KB limit")
+        return v
 
 
 class IngestLectureRequest(BaseModel):
@@ -13,6 +28,8 @@ class IngestLectureRequest(BaseModel):
     captions: str = ""
     captions_format: Literal["srt", "vtt", "text"] = "text"
     intensity: Literal["light", "standard", "intense"] = "standard"
+    creator_context: CreatorContext | None = None
+    visual_evidence: list[dict[str, Any]] | None = None
 
     @field_validator("video_url")
     @classmethod
@@ -22,3 +39,12 @@ class IngestLectureRequest(BaseModel):
             return value
         parsed = HttpUrl(value)
         return str(parsed)
+
+
+class PreflightRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    duration_seconds: float = Field(..., gt=0)
+    captions: str = ""
+    captions_format: Literal["srt", "vtt", "text"] = "text"
+    transcript: list[dict[str, Any]] | None = None

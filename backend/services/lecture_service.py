@@ -12,12 +12,22 @@ from backend.services.checkpoint_generator import SPACING_SECONDS, enrich_genera
 
 
 class LectureService:
-    def __init__(self, lectures_dir: Path | None = None) -> None:
+    def __init__(self, lectures_dir: Path | None = None, db: Any | None = None) -> None:
         if lectures_dir is None:
             settings = get_settings()
             lectures_dir = settings.lectures_dir
         self.lectures_dir = lectures_dir
+        self.db = db
         self._runtime_lectures: dict[str, Lecture] = {}
+
+    def _ensure_db(self) -> Any | None:
+        if self.db is None:
+            try:
+                from backend.database import get_database
+                self.db = get_database()
+            except Exception:
+                pass
+        return self.db
 
     def list_lectures(self) -> list[LectureSummary]:
         summaries: list[LectureSummary] = []
@@ -85,10 +95,12 @@ class LectureService:
 _lecture_service_instance: LectureService | None = None
 
 
-def get_lecture_service() -> LectureService:
+def get_lecture_service(db: Any | None = None) -> LectureService:
     global _lecture_service_instance
     if _lecture_service_instance is None:
-        _lecture_service_instance = LectureService()
+        _lecture_service_instance = LectureService(db=db)
+    elif db is not None and _lecture_service_instance.db is None:
+        _lecture_service_instance.db = db
     return _lecture_service_instance
 
     

@@ -380,6 +380,18 @@ class Database:
             what="load_session",
         )
 
+    def save_study_guide(self, guide_id: str, session_id: str, content_md: str) -> None:
+        """Persist or update study guide."""
+        with self._lock:
+            self.sessions.save_study_guide(guide_id, session_id, content_md)
+
+    def get_study_guide(self, session_id: str) -> dict[str, Any] | None:
+        """Fetch study guide by session_id."""
+        return self._retry_idempotent(
+            lambda: self.sessions.get_study_guide(session_id),
+            what="get_study_guide",
+        )
+
     # -------------------------------------------------------------------------
     # Learner Profile Persistence (delegates to LearnerRepository)
     # -------------------------------------------------------------------------

@@ -1,10 +1,28 @@
 import { useState } from "react";
-import { ingestLecture, type IngestLecturePayload } from "../api";
+import {
+  ingestLecture,
+  fetchPreflight,
+  type IngestLecturePayload,
+} from "../api";
 import { readVideoDuration } from "../adapters/videoDuration";
 import type { Lecture } from "../types";
+import { PreflightReport, type PreflightReportData } from "./PreflightReport";
+import { ContextPanel } from "./ContextPanel";
+import {
+  calculateVisualAnalysisCost,
+  analyzeWeakWindowsWithGemini,
+  type VisualEvidenceItem,
+} from "./visualAnalysis";
 
 type Props = { onComplete: (lecture: Lecture) => void; onCancel: () => void };
-type Stage = "ready" | "reading_duration" | "transcribing" | "generating" | "error";
+type Stage =
+  | "ready"
+  | "checking_preflight"
+  | "reading_duration"
+  | "transcribing"
+  | "visual_analysis"
+  | "generating"
+  | "error";
 const GEMINI_KEY_SLOT = "gl_creator_gemini_key";
 
 function fileToBase64(file: File): Promise<string> {
@@ -48,7 +66,6 @@ export default function IngestPage({ onComplete, onCancel }: Props) {
     try {
       const saved = window.localStorage.getItem(GEMINI_KEY_SLOT);
       if (saved) return saved;
-      // Migrate a key saved by earlier builds, which only lasted for the tab session.
       const legacy = window.sessionStorage.getItem(GEMINI_KEY_SLOT) ?? "";
       if (legacy) {
         window.localStorage.setItem(GEMINI_KEY_SLOT, legacy);
@@ -65,6 +82,13 @@ export default function IngestPage({ onComplete, onCancel }: Props) {
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [transcript, setTranscript] = useState("");
 
+  // Context & Visual additions (Rev 8.0)
+  const [notes, setNotes] = useState("");
+  const [chapters, setChapters] = useState("");
+  const [preflightReport, setPreflightReport] = useState<PreflightReportData | null>(null);
+  const [visualEvidence, setVisualEvidence] = useState<VisualEvidenceItem[]>([]);
+  const [visualAnalysisStatus, setVisualAnalysisStatus] = useState<string | null>(null);
+
   const saveKey = (value: string) => {
     setGeminiKey(value);
     try {
@@ -74,6 +98,68 @@ export default function IngestPage({ onComplete, onCancel }: Props) {
   };
 
   const activeGeminiKey = useLectureKey ? lectureGeminiKey : geminiKey;
+
+  const handlePreflightCheck = async () => {
+    if (!creatorToken.trim()) {
+      setError("Enter a creator token first to run preflight check.");
+      return;
+    }
+    setError(null);
+    try {
+      setStage("checking_preflight");
+      const durationSeconds = await readVideoDuration(videoUrl);
+      let captions = transcript;
+      let captionsFormat: "srt" | "vtt" | "text" = "text";
+      if (captionFile) {
+        captions = await captionFile.text();
+        captionsFormat = captionFile.name.toLowerCase().endsWith(".vtt") ? "vtt" : "srt";
+      }
+      const report = await fetchPreflight(
+        {
+          captions,
+          captions_format: captionsFormat,
+          duration_seconds: durationSeconds,
+        },
+        creatorToken
+      );
+      setPreflightReport(report);
+      setStage("ready");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Preflight check failed.");
+      setStage("error");
+    }
+  };
+
+  const handleRunVisualAnalysis = async () => {
+    if (!preflightReport || preflightReport.weak_windows.length === 0) return;
+    if (!activeGeminiKey.trim()) {
+      setError("A Gemini key is required to perform visual analysis on weak sections.");
+      return;
+    }
+
+    const { totalMinutes, estimatedCostUsd } = calculateVisualAnalysisCost(preflightReport.weak_windows);
+    const confirmed = window.confirm(
+      `Visual analysis will inspect ${totalMinutes} minute(s) of weak video sections browser-side with Gemini.\nEstimated cost: ~$${estimatedCostUsd.toFixed(4)} USD.\n\nProceed?`
+    );
+    if (!confirmed) return;
+
+    setError(null);
+    try {
+      setStage("visual_analysis");
+      setVisualAnalysisStatus("Analyzing visible video frames browser-side...");
+      const items = await analyzeWeakWindowsWithGemini(
+        videoUrl,
+        preflightReport.weak_windows,
+        activeGeminiKey
+      );
+      setVisualEvidence(items);
+      setVisualAnalysisStatus(`Identified ${items.length} visual evidence items.`);
+      setStage("ready");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Visual analysis failed.");
+      setStage("error");
+    }
+  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -92,10 +178,27 @@ export default function IngestPage({ onComplete, onCancel }: Props) {
         setTranscript(captions);
       }
       setStage("generating");
-      const lecture = await ingestLecture({
-        video_url: videoUrl, duration_seconds: durationSeconds,
-        captions, captions_format: captionsFormat, intensity,
-      }, creatorToken, activeGeminiKey);
+
+      const payload: IngestLecturePayload = {
+        video_url: videoUrl,
+        duration_seconds: durationSeconds,
+        captions,
+        captions_format: captionsFormat,
+        intensity,
+      };
+
+      if (notes.trim() || chapters.trim()) {
+        payload.creator_context = {
+          notes: notes.trim() || undefined,
+          chapters: chapters.trim() || undefined,
+        };
+      }
+
+      if (visualEvidence.length > 0) {
+        payload.visual_evidence = visualEvidence;
+      }
+
+      const lecture = await ingestLecture(payload, creatorToken, activeGeminiKey);
       onComplete(lecture);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Lecture ingestion failed.");
@@ -103,26 +206,180 @@ export default function IngestPage({ onComplete, onCancel }: Props) {
     }
   };
 
-  const busy = stage === "reading_duration" || stage === "transcribing" || stage === "generating";
+  const busy =
+    stage === "checking_preflight" ||
+    stage === "reading_duration" ||
+    stage === "transcribing" ||
+    stage === "visual_analysis" ||
+    stage === "generating";
+
   return (
     <section className="ingest-page" aria-labelledby="ingest-title">
       <h2 id="ingest-title">Create a lecture</h2>
-      <p>Paste a video link. Its length is read automatically; add captions or transcribe audio if available. Leave the key blank to use the key configured for this app. A key entered here is saved in this browser for future lectures.</p>
+      <p>
+        Paste a video link. Its length is read automatically; add captions or transcribe audio if available.
+        Leave the key blank to use the key configured for this app. A key entered here is saved in this browser for future lectures.
+      </p>
       <form onSubmit={handleSubmit}>
-        <label>Creator token<input type="password" autoComplete="off" required value={creatorToken} onChange={(e) => setCreatorToken(e.target.value)} /></label>
-        <label>Default Gemini key (saved for future lectures)<input type="password" autoComplete="off" value={geminiKey} onChange={(e) => saveKey(e.target.value)} /></label>
-        <label><input type="checkbox" checked={useLectureKey} onChange={(e) => setUseLectureKey(e.target.checked)} /> Use a different Gemini key for this lecture only</label>
-        {useLectureKey && <label>Gemini key for this lecture<input type="password" autoComplete="off" value={lectureGeminiKey} onChange={(e) => setLectureGeminiKey(e.target.value)} /></label>}
-        <label>Video URL<input type="url" required value={videoUrl} onChange={(e) => setVideoUrl(e.target.value)} placeholder="https://…" /></label>
-        <label>Checkpoint intensity<select value={intensity} onChange={(e) => setIntensity(e.target.value as typeof intensity)}>
-          <option value="light">Light · 5–6 minutes apart</option><option value="standard">Standard · 3–4 minutes apart</option><option value="intense">Intense · 2–3 minutes apart</option>
-        </select></label>
-        <label>Caption file (SRT or VTT)<input type="file" accept=".srt,.vtt,text/vtt,application/x-subrip" onChange={(e) => { setCaptionFile(e.target.files?.[0] ?? null); setAudioFile(null); }} /></label>
-        <label>Or audio for browser transcription<input type="file" accept="audio/*" onChange={(e) => { setAudioFile(e.target.files?.[0] ?? null); setCaptionFile(null); }} /></label>
-        <label>Or paste transcript text<textarea rows={5} value={transcript} onChange={(e) => { setTranscript(e.target.value); setCaptionFile(null); setAudioFile(null); }} /></label>
-        {busy && <p role="status">{stage === "reading_duration" ? "Reading video length…" : stage === "transcribing" ? "Transcribing audio in your browser…" : "Generating and saving checkpoints…"}</p>}
+        <label>
+          Creator token
+          <input
+            type="password"
+            autoComplete="off"
+            required
+            value={creatorToken}
+            onChange={(e) => setCreatorToken(e.target.value)}
+          />
+        </label>
+        <label>
+          Default Gemini key (saved for future lectures)
+          <input
+            type="password"
+            autoComplete="off"
+            value={geminiKey}
+            onChange={(e) => saveKey(e.target.value)}
+          />
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={useLectureKey}
+            onChange={(e) => setUseLectureKey(e.target.checked)}
+          />
+          {" "}Use a different Gemini key for this lecture only
+        </label>
+        {useLectureKey && (
+          <label>
+            Gemini key for this lecture
+            <input
+              type="password"
+              autoComplete="off"
+              value={lectureGeminiKey}
+              onChange={(e) => setLectureGeminiKey(e.target.value)}
+            />
+          </label>
+        )}
+        <label>
+          Video URL
+          <input
+            type="url"
+            required
+            value={videoUrl}
+            onChange={(e) => setVideoUrl(e.target.value)}
+            placeholder="https://…"
+          />
+        </label>
+        <label>
+          Checkpoint intensity
+          <select
+            value={intensity}
+            onChange={(e) => setIntensity(e.target.value as typeof intensity)}
+          >
+            <option value="light">Light · 5–6 minutes apart</option>
+            <option value="standard">Standard · 3–4 minutes apart</option>
+            <option value="intense">Intense · 2–3 minutes apart</option>
+          </select>
+        </label>
+        <label>
+          Caption file (SRT or VTT)
+          <input
+            type="file"
+            accept=".srt,.vtt,text/vtt,application/x-subrip"
+            onChange={(e) => {
+              setCaptionFile(e.target.files?.[0] ?? null);
+              setAudioFile(null);
+            }}
+          />
+        </label>
+        <label>
+          Or audio for browser transcription
+          <input
+            type="file"
+            accept="audio/*"
+            onChange={(e) => {
+              setAudioFile(e.target.files?.[0] ?? null);
+              setCaptionFile(null);
+            }}
+          />
+        </label>
+        <label>
+          Or paste transcript text
+          <textarea
+            rows={5}
+            value={transcript}
+            onChange={(e) => {
+              setTranscript(e.target.value);
+              setCaptionFile(null);
+              setAudioFile(null);
+            }}
+          />
+        </label>
+
+        {/* Preflight Check Button */}
+        <div style={{ margin: "8px 0" }}>
+          <button
+            type="button"
+            onClick={handlePreflightCheck}
+            disabled={busy || (!transcript && !captionFile)}
+            style={{
+              background: "#334155",
+              color: "#f8fafc",
+              border: "1px solid #475569",
+              padding: "6px 12px",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontSize: "0.85rem",
+            }}
+            data-testid="btn-preflight"
+          >
+            Check quality (preflight)
+          </button>
+        </div>
+
+        {preflightReport && (
+          <PreflightReport
+            report={preflightReport}
+            canRunVisualAnalysis={Boolean(activeGeminiKey)}
+            onRunVisualAnalysis={handleRunVisualAnalysis}
+          />
+        )}
+
+        {visualAnalysisStatus && (
+          <p style={{ fontSize: "0.85rem", color: "#38bdf8", margin: "4px 0" }}>
+            {visualAnalysisStatus}
+          </p>
+        )}
+
+        {/* Creator Context (Notes & Chapters) */}
+        <ContextPanel
+          notes={notes}
+          chapters={chapters}
+          onNotesChange={setNotes}
+          onChaptersChange={setChapters}
+        />
+
+        {busy && (
+          <p role="status">
+            {stage === "checking_preflight"
+              ? "Analyzing transcript quality..."
+              : stage === "reading_duration"
+              ? "Reading video length…"
+              : stage === "transcribing"
+              ? "Transcribing audio in your browser…"
+              : stage === "visual_analysis"
+              ? "Analyzing video frames with Gemini browser-side..."
+              : "Generating and saving checkpoints…"}
+          </p>
+        )}
         {error && <p role="alert" className="error-message">{error}</p>}
-        <div className="ingest-actions"><button type="submit" disabled={busy}>{busy ? "Working…" : "Generate lecture"}</button><button type="button" onClick={onCancel} disabled={busy}>Cancel</button></div>
+        <div className="ingest-actions">
+          <button type="submit" disabled={busy}>
+            {busy ? "Working…" : "Generate lecture"}
+          </button>
+          <button type="button" onClick={onCancel} disabled={busy}>
+            Cancel
+          </button>
+        </div>
       </form>
     </section>
   );

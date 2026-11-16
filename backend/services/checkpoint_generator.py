@@ -4,10 +4,19 @@ from __future__ import annotations
 
 import re
 
-from backend.schemas.lecture import Intervention, Lecture, Option
+from backend.schemas.lecture import (
+    Difficulty,
+    Intervention,
+    InterventionPolicy,
+    InterventionType,
+    Lecture,
+    Option,
+    ResumptionPolicy,
+)
 
 SPACING_SECONDS = {"light": 330.0, "standard": 210.0, "intense": 150.0}
 MIN_CHECKPOINT_GAP_SECONDS = 90.0
+MAX_UNCHECKED_GAP_SECONDS = 480.0
 
 
 def checkpoint_count(duration_seconds: float, intensity: str) -> int:
@@ -126,4 +135,56 @@ def enrich_generated_lecture(lecture: Lecture, intensity: str = "standard") -> L
         enriched.append(intervention.model_copy(update=updates))
     result.interventions = enriched
     result.recall_pool = _recall_pool(result, enriched)
+    return result
+
+
+def insert_fallback_reflections(
+    lecture: Lecture,
+    weak_windows: list[dict[str, float]] | None = None,
+    max_gap: float = MAX_UNCHECKED_GAP_SECONDS,
+) -> Lecture:
+    """Insert ungraded reflect checkpoints (fb_chk_*) when an unchecked gap exceeds max_gap
+    and contains weak windows (§7.3.8).
+    """
+    if not weak_windows or not lecture.interventions:
+        return lecture
+
+    result = lecture.model_copy(deep=True)
+    interventions = sorted(result.interventions, key=lambda x: x.trigger_time)
+
+    boundary_times = [0.0] + [i.trigger_time for i in interventions] + [lecture.duration_seconds]
+    new_reflections: list[Intervention] = []
+
+    fb_counter = 1
+    for start_t, end_t in zip(boundary_times[:-1], boundary_times[1:]):
+        gap = end_t - start_t
+        if gap > max_gap:
+            has_weak = any(
+                w.get("start_s", 0.0) < end_t and w.get("end_s", 0.0) > start_t
+                for w in weak_windows
+            )
+            if has_weak:
+                mid = round(start_t + gap / 2.0, 2)
+                if (mid - start_t >= MIN_CHECKPOINT_GAP_SECONDS) and (end_t - mid >= MIN_CHECKPOINT_GAP_SECONDS):
+                    new_reflections.append(
+                        Intervention(
+                            id=f"fb_chk_{fb_counter}",
+                            trigger_time=mid,
+                            concept="Reflection",
+                            difficulty=Difficulty.EASY,
+                            type=InterventionType.OPEN_ENDED,
+                            question="In your own words, what did the last few minutes show or teach?",
+                            policy=InterventionPolicy.SKIPPABLE,
+                            resumption_policy=ResumptionPolicy.IMMEDIATE_OPTIMISTIC,
+                            rubric=None,
+                            origin="fallback",
+                            review_state="auto",
+                            confidence="high",
+                        )
+                    )
+                    fb_counter += 1
+
+    if new_reflections:
+        result.interventions = sorted(interventions + new_reflections, key=lambda x: x.trigger_time)
+
     return result
