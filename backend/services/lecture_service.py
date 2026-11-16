@@ -1,9 +1,8 @@
 """Lecture loader and repository service."""
 
 import json
-import re
-import unicodedata
 from pathlib import Path
+from typing import Any
 from backend.config import get_settings
 from backend.schemas.lecture import Lecture, LectureSummary
 from backend.schemas.lecture import Intervention, Option, InterventionType, Difficulty
@@ -31,33 +30,63 @@ class LectureService:
 
     def list_lectures(self) -> list[LectureSummary]:
         summaries: list[LectureSummary] = []
-        if not self.lectures_dir.exists():
-            return summaries
-
-        for file_path in sorted(self.lectures_dir.glob("*.json")):
+        db = self._ensure_db()
+        listed_ids: set[str] = set()
+        try:
+            rows = db.lectures.list_lectures() if db is not None else []
+        except Exception:
+            rows = []
+        for row in rows:
             try:
-                lecture = self.get_lecture_by_file(file_path)
-                lecture = self._runtime_lectures.get(lecture.id, lecture)
+                lecture = Lecture.model_validate_json(row["content"])
                 summaries.append(
                     LectureSummary(
-                        id=lecture.id,
+                        id=row["lecture_id"],
                         duration_seconds=lecture.duration_seconds,
-                        video_url=lecture.video_url,
+                        video_url=row["video_url"],
                         intervention_count=len(lecture.interventions),
                     )
                 )
+                listed_ids.add(lecture.id)
             except Exception:
-                # Invalid JSON files are skipped or flagged
                 continue
 
+        settings = get_settings()
+        if settings.env.lower() != "production" and self.lectures_dir.exists():
+            for file_path in sorted(self.lectures_dir.glob("*.json")):
+                if file_path.stem in listed_ids or not self.is_sample_lecture(file_path.stem):
+                    continue
+                try:
+                    lecture = self.get_lecture_by_file(file_path)
+                    summaries.append(
+                        LectureSummary(
+                            id=lecture.id,
+                            duration_seconds=lecture.duration_seconds,
+                            video_url=lecture.video_url,
+                            intervention_count=len(lecture.interventions),
+                        )
+                    )
+                except Exception:
+                    continue
         priority = {"math_sample_lecture": 0}
         return sorted(summaries, key=lambda lecture: (priority.get(lecture.id, 99), lecture.id))
 
     def get_lecture(self, lecture_id: str) -> Lecture | None:
+        db = self._ensure_db()
+        try:
+            stored = db.lectures.get_lecture(lecture_id) if db is not None else None
+        except Exception:
+            stored = None
+        if stored and stored.get("content"):
+            return Lecture.model_validate_json(stored["content"])
+
         runtime_lecture = self._runtime_lectures.get(lecture_id)
         if runtime_lecture is not None:
             return runtime_lecture.model_copy(deep=True)
 
+        settings = get_settings()
+        if settings.env.lower() == "production" or not self.is_sample_lecture(lecture_id):
+            return None
         file_path = self.lectures_dir / f"{lecture_id}.json"
         if not file_path.exists():
             return None
@@ -70,17 +99,8 @@ class LectureService:
 
     def is_sample_lecture(self, lecture_id: str) -> bool:
         """Return whether an ID belongs to the canonical or bundled demo set."""
-        if lecture_id == "math_sample_lecture":
-            return True
-        sample_dir = self.lectures_dir.parent.parent / "sample_lectures"
-        if not sample_dir.exists():
-            return False
-        for video_path in sample_dir.glob("*.mp4"):
-            ascii_stem = unicodedata.normalize("NFKD", video_path.stem).encode("ascii", "ignore").decode()
-            bundled_id = re.sub(r"[^a-z0-9]+", "_", ascii_stem.lower()).strip("_")
-            if bundled_id == lecture_id:
-                return True
-        return False
+        media_dir = get_settings().media_dir
+        return (media_dir / f"{lecture_id}.mp4").is_file()
 
     def save_lecture(self, lecture: Lecture) -> None:
         file_path = self.lectures_dir / f"{lecture.id}.json"

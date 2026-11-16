@@ -135,6 +135,17 @@ class SessionService:
             ),
         )
 
+    def _load_lecture_from_repository(self, lecture_id: str) -> Lecture | None:
+        """Load authoritative lecture content, allowing the service's bundled-sample fallback."""
+        try:
+            stored = self.db.lectures.get_lecture(lecture_id)
+        except Exception:
+            stored = None
+        if stored and stored.get("content"):
+            return Lecture.model_validate_json(stored["content"])
+        # LectureService permits file fallback only for bundled samples outside production.
+        return self.lecture_service.get_lecture(lecture_id)
+
     def _get_or_load_session(self, session_id: str) -> RuntimeSession:
         if session_id in self._sessions:
             return self._sessions[session_id]
@@ -143,9 +154,16 @@ class SessionService:
         if not data:
             raise SessionError(f"Session '{session_id}' not found.", status_code=404)
 
-        lecture = self.lecture_service.get_lecture(data["lecture_id"])
+        lecture = self._load_lecture_from_repository(data["lecture_id"])
         if not lecture:
             raise SessionError(f"Lecture '{data['lecture_id']}' not found.", status_code=404)
+
+        # Restore the exact intervention set recorded for this in-flight session.
+        # This preserves its original contract if the lecture has since changed.
+        session_intervention_ids = set(data.get("interventions_state", {}))
+        lecture.interventions = [
+            item for item in lecture.interventions if item.id in session_intervention_ids
+        ]
 
         session = RuntimeSession(
             session_id=data["session_id"],
@@ -177,7 +195,7 @@ class SessionService:
         external_user_id: str = "default_learner",
         tier_override: int | None = None,
     ) -> SessionState:
-        lecture = self.lecture_service.get_lecture(lecture_id)
+        lecture = self._load_lecture_from_repository(lecture_id)
         if not lecture:
             raise SessionError(f"Lecture '{lecture_id}' not found.", status_code=404)
 
@@ -405,6 +423,9 @@ class SessionService:
     ) -> EvaluationResult:
         session = self._get_or_load_session(session_id)
 
+        if not any(item.id == intervention_id for item in session.lecture.interventions):
+            raise SessionError(f"Intervention '{intervention_id}' not found.", status_code=404)
+
         # Idempotency check: return previous result if key already processed
         if idempotency_key in session.completed_submissions:
             return session.completed_submissions[idempotency_key]
@@ -501,6 +522,14 @@ class SessionService:
         submission: InquiryExperimentSubmission,
     ) -> EvaluationResult:
         session = self._get_or_load_session(session_id)
+
+        if not any(
+            item.id == submission.intervention_id
+            for item in session.lecture.interventions
+        ):
+            raise SessionError(
+                f"Intervention '{submission.intervention_id}' not found.", status_code=404
+            )
 
         if submission.idempotency_key in session.completed_submissions:
             return session.completed_submissions[submission.idempotency_key]

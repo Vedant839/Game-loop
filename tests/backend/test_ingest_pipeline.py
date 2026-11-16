@@ -266,6 +266,126 @@ def test_ingest_medium_checkpoint_is_hidden_from_public_and_session_lecture_rout
     assert not {"concepts", "analysis_report", "creator_context", "visual_evidence"}.intersection(session_payload)
 
 
+def test_ingest_session_uses_repository_and_excludes_needs_review(tmp_path, monkeypatch, creator_token_factory):
+    import backend.main as main
+    import backend.services.session_service as session_module
+    from backend.config import get_settings
+    from backend.services.session_service import get_session_service
+
+    service = LectureService(tmp_path / "lectures")
+    service.lectures_dir.mkdir(parents=True)
+
+    def fail_if_file_service_is_used(_lecture_id):
+        raise AssertionError("session creation and restore must use lectures.content")
+
+    monkeypatch.setattr(service, "get_lecture", fail_if_file_service_is_used)
+    monkeypatch.setattr(main, "get_lecture_service", lambda: service)
+    monkeypatch.setattr(session_module, "get_lecture_service", lambda: service)
+    monkeypatch.setattr(main, "settings", SimpleNamespace(gemini_api_key=None))
+
+    class TwoConfidenceFake(FakeGeminiClient):
+        def generate_content(self, **kwargs):
+            if "CONCEPT_DATA_START" not in kwargs["contents"]:
+                return super().generate_content(**kwargs)
+            selected = json.loads(
+                kwargs["contents"].split("CONCEPT_DATA_START\n", 1)[1]
+                .split("\nCONCEPT_DATA_END", 1)[0]
+            )
+            return SimpleNamespace(text=json.dumps({"checkpoints": [
+                {
+                    "concept_id": concept["concept_id"],
+                    "type": "single_choice",
+                    "question": f"Which statement describes {concept['name']}?",
+                    "options": [
+                        {"id": "a", "text": "The defining behavior"},
+                        {"id": "b", "text": "A color and shape"},
+                        {"id": "c", "text": "A mass and volume"},
+                        {"id": "d", "text": "A speed and temperature"},
+                    ],
+                    "correct_answer": "a",
+                }
+                for concept in selected
+            ]}))
+
+    concepts = [
+        {
+            "name": "Auto concept", "kind": "definition",
+            "description": "The first concept has independently supported evidence.",
+            "start_s": 1.0, "end_s": 4.0,
+            "evidence": [
+                {"source": "transcript", "quote": "An auto concept is supported by stable transcript evidence."},
+                {"source": "creator_context", "quote": "The auto concept is also supported by this creator note."},
+            ],
+        },
+        {
+            "name": "Review concept", "kind": "definition",
+            "description": "The second concept has only one weak transcript source.",
+            "start_s": 211.0, "end_s": 214.0,
+            "evidence": [
+                {"source": "transcript", "quote": "A review concept has only this transcript evidence."},
+            ],
+        },
+    ]
+    fake = TwoConfidenceFake(concepts)
+    monkeypatch.setitem(app.dependency_overrides, main.get_gemini_client, lambda: fake)
+
+    response = TestClient(app).post(
+        "/api/creator/ingest",
+        headers={
+            **creator_token_factory("p151_db_session"),
+            "X-Gemini-Key": "fixture-api-key",
+        },
+        json={
+            "video_url": "https://example.com/review-filter.mp4",
+            "duration_seconds": 500,
+            "captions": (
+                "1\n00:00:01,000 --> 00:00:04,000\n"
+                "An auto concept is supported by stable transcript evidence.\n\n"
+                "2\n00:03:31,000 --> 00:03:34,000\n"
+                "A review concept has only this transcript evidence."
+            ),
+            "captions_format": "srt",
+            "intensity": "standard",
+            "creator_context": {"notes": "The auto concept is also supported by this creator note."},
+        },
+    )
+    assert response.status_code == 201, response.text
+    lecture_id = response.json()["id"]
+    interventions = response.json()["interventions"]
+    auto = next(item for item in interventions if item["review_state"] == "auto")
+    needs_review = next(item for item in interventions if item["review_state"] == "needs_review")
+
+    database_row = get_database().lectures.get_lecture(lecture_id)
+    assert database_row is not None
+    assert json.loads(database_row["content"])["id"] == lecture_id
+    assert not (get_settings().lectures_dir / f"{lecture_id}.json").exists()
+    assert list(service.lectures_dir.glob("*.json")) == []
+
+    client = TestClient(app)
+    created = client.post("/api/sessions", json={"lecture_id": lecture_id})
+    assert created.status_code == 201, created.text
+    session_id = created.json()["session_id"]
+    assert [item["id"] for item in created.json()["interventions"]] == [auto["id"]]
+    stored_session = get_database().load_session(session_id)
+    assert set(stored_session["interventions_state"]) == {auto["id"]}
+
+    session_service = get_session_service()
+    session_service._sessions.pop(session_id)
+    restored = client.get(f"/api/sessions/{session_id}")
+    assert restored.status_code == 200
+    assert [item["id"] for item in restored.json()["interventions"]] == [auto["id"]]
+
+    rejected_submission = client.post(
+        f"/api/sessions/{session_id}/submit",
+        json={
+            "intervention_id": needs_review["id"],
+            "idempotency_key": "hidden-review-checkpoint",
+            "answer": "a",
+        },
+    )
+    assert rejected_submission.status_code == 404
+
+
 def test_provider_failure_returns_safe_502_and_does_not_persist(tmp_path, monkeypatch, creator_token_factory, caplog):
     import backend.main as main
 

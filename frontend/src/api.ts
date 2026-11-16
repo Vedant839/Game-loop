@@ -359,19 +359,6 @@ export async function fetchLearnerProfile(
   return (await response.json()) as import("./types").LearnerProfile;
 }
 
-export async function generateInterventions(lectureId: string): Promise<Lecture> {
-  const response = await fetchWithTimeout(
-    `${getApiBaseUrl()}/api/lectures/${lectureId}/generate_interventions`,
-    { method: "POST" },
-    90000
-  );
-  if (!response.ok) {
-    const errorData = (await response.json().catch(() => ({}))) as { detail?: string };
-    throw new Error(errorData.detail ?? "Failed to generate interventions.");
-  }
-  return (await response.json()) as Lecture;
-}
-
 export async function skipIntervention(
   sessionId: string,
   interventionId: string,

@@ -4,7 +4,6 @@ import {
   fetchHealthStatus,
   fetchLecture,
   fetchLectures,
-  generateInterventions,
   getApiBaseUrl,
   hasTabOnlyProgress,
 } from "./api";
@@ -13,8 +12,6 @@ import IngestPage from "./studio/IngestPage";
 import type { Lecture, LectureSummary, SessionState } from "./types";
 
 type ConnectionState = "connecting" | "available" | "unavailable";
-type GenerationState = "idle" | "generating" | "error";
-
 function sortLecturesForPreference(lectures: LectureSummary[]): LectureSummary[] {
   const priority = { math_sample_lecture: 0 };
 
@@ -38,8 +35,6 @@ export default function App() {
   const [sessionState, setSessionState] = useState<SessionState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tabOnlyProgress, setTabOnlyProgress] = useState(false);
-  const [generationState, setGenerationState] = useState<GenerationState>("idle");
-  const [generationError, setGenerationError] = useState<string | null>(null);
   const [showIngestPage, setShowIngestPage] = useState(false);
 
   // On mount: health check + load lecture list
@@ -79,8 +74,6 @@ export default function App() {
     setSelectedLecture(null);
     setSessionState(null);
     setError(null);
-    setGenerationError(null);
-    setGenerationState("idle");
 
     async function load() {
       try {
@@ -106,30 +99,6 @@ export default function App() {
   const handleLectureChange = useCallback((id: string) => {
     setSelectedLectureId(id);
   }, []);
-
-  // Generate interventions with Gemini for the current lecture
-  const handleGenerateInterventions = useCallback(async () => {
-    if (!selectedLectureId || !selectedLecture) return;
-    setGenerationState("generating");
-    setGenerationError(null);
-
-    try {
-      const lectureWithInterventions = await generateInterventions(selectedLectureId);
-      setSelectedLecture(lectureWithInterventions);
-
-      // Create a new session bound to the freshly generated intervention set
-      const newSession = await createSession(selectedLectureId);
-      setSessionState(newSession);
-      setGenerationState("idle");
-    } catch (err) {
-      setGenerationState("error");
-      setGenerationError(
-        err instanceof Error ? err.message : "Gemini generation failed."
-      );
-    }
-  }, [selectedLectureId, selectedLecture]);
-
-  const isGenerating = generationState === "generating";
 
   const handleIngestComplete = useCallback((lecture: Lecture) => {
     setLectures((previous) => [
@@ -173,7 +142,6 @@ export default function App() {
             id="lecture-select"
             value={selectedLectureId ?? ""}
             onChange={(e) => handleLectureChange(e.target.value)}
-            disabled={isGenerating}
           >
             {lectures.map((l) => (
               <option key={l.id} value={l.id}>
@@ -186,25 +154,11 @@ export default function App() {
             Add video
           </button>
 
-          <button
-            id="generate-interventions-btn"
-            onClick={handleGenerateInterventions}
-            disabled={isGenerating || !selectedLecture}
-            className="generate-btn"
-          >
-            {isGenerating ? "Generating with Gemini…" : "Generate Interventions with Gemini"}
-          </button>
         </div>
       )}
 
       {!showIngestPage && connectionState === "available" && lectures.length === 0 && (
         <button type="button" className="generate-btn" onClick={() => setShowIngestPage(true)}>Add video</button>
-      )}
-
-      {generationError && (
-        <p role="alert" className="error-message generation-error">
-          Generation failed: {generationError}
-        </p>
       )}
 
       {connectionState === "available" && selectedLecture && sessionState && (

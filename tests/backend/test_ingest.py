@@ -70,6 +70,8 @@ def test_creator_ingest_parses_captions_and_persists_lecture(tmp_path, monkeypat
     assert lecture["transcript"][0]["text"] == "A vector has magnitude and direction."
     assert lecture["interventions"]
     assert service.get_lecture(lecture["id"]) is not None
+    assert get_database().lectures.get_lecture(lecture["id"]) is not None
+    assert list(service.lectures_dir.glob("*.json")) == []
     event = get_database().export_telemetry(client_id="ingest_creator")[0]
     assert event["event_type"] == "lecture_ingestion_completed"
     assert event["payload"]["duration_ms"] >= 0

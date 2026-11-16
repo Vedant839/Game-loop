@@ -118,10 +118,15 @@ def test_studio_lecture_is_scoped_to_the_creating_creator(creator_token_factory,
 
     creator_a = creator_token_factory("creator_a")
     creator_b = creator_token_factory("creator_b")
-    lecture = get_lecture_service().get_lecture("math_sample_lecture")
+    service = get_lecture_service()
+    lecture = service.get_lecture("math_sample_lecture")
     assert lecture is not None
     lecture.id = "creator_b_private_lecture"
-    monkeypatch.setattr(get_lecture_service(), "save_lecture", lambda _lecture: None)
+
+    def fail_if_file_copy_is_written(_lecture):
+        raise AssertionError("POST /api/lectures must persist to the repository only")
+
+    monkeypatch.setattr(service, "save_lecture", fail_if_file_copy_is_written)
 
     created = client.post(
         "/api/lectures", headers=creator_b, json=lecture.model_dump(mode="json")
@@ -135,3 +140,8 @@ def test_studio_lecture_is_scoped_to_the_creating_creator(creator_token_factory,
     assert any(item.get("correct_answer") for item in own.json()["interventions"])
     assert other.status_code == 404
     assert get_database().lectures.get_lecture("creator_b_private_lecture")["creator_id"] == "creator_b"
+    assert not (service.lectures_dir / "creator_b_private_lecture.json").exists()
+
+    listed = client.get("/api/lectures")
+    summary = next(item for item in listed.json() if item["id"] == "creator_b_private_lecture")
+    assert set(summary) == {"id", "duration_seconds", "video_url", "intervention_count"}

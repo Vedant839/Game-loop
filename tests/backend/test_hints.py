@@ -1,21 +1,19 @@
 import json
-from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from backend.database import get_database
 from backend.main import app
-from backend.services.lecture_service import LectureService
-import backend.services.lecture_service as lecture_service_module
 import backend.services.session_service as session_service_module
+from scripts.migrate import migrate_database
 
 
 client = TestClient(app)
 
 
-def test_hints_are_gated_by_persisted_attempt_count(tmp_path: Path, monkeypatch):
-    lecture_dir = tmp_path / "lectures"
-    lecture_dir.mkdir()
+def test_hints_are_gated_by_persisted_attempt_count(monkeypatch):
+    db = get_database()
+    migrate_database(db.db_path)
     lecture = {
         "id": "hint_test_lecture",
         "title": "Hints",
@@ -41,9 +39,10 @@ def test_hints_are_gated_by_persisted_attempt_count(tmp_path: Path, monkeypatch)
             }
         ],
     }
-    (lecture_dir / "hint_test_lecture.json").write_text(json.dumps(lecture), encoding="utf-8")
-    monkeypatch.setattr(
-        lecture_service_module, "_lecture_service_instance", LectureService(lecture_dir)
+    db.lectures.save_lecture(
+        lecture_id="hint_test_lecture", creator_id="hint_test_creator",
+        title="Hints", video_url="https://example.com/video.mp4",
+        source_type="direct", content_json=json.dumps(lecture),
     )
     monkeypatch.setattr(session_service_module, "_session_service_instance", None)
 

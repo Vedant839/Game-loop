@@ -99,14 +99,12 @@ def create_lecture(
     lecture: Lecture,
     _creator: dict[str, str] = Depends(require_creator),
 ) -> Lecture:
-    """Create a custom lecture definition and persist it on disk."""
-    service = get_lecture_service()
+    """Create a custom lecture definition and persist it to the repository."""
     if lecture.id == "math_sample_lecture":
         raise HTTPException(
             status_code=400,
             detail="The sample lecture ID is reserved; choose a custom lecture ID.",
         )
-    service.save_lecture(lecture)
     video_url = lecture.video_url.lower()
     source_type = (
         "youtube" if "youtube.com/" in video_url or "youtu.be/" in video_url
@@ -229,8 +227,6 @@ def ingest_lecture(
             detail={"code": "understanding_unavailable", "analysis_report": lecture.analysis_report},
         ) from None
 
-    service = get_lecture_service()
-    service.save_lecture(lecture)
     video_url_lower = lecture.video_url.lower()
     source_type = (
         "youtube" if "youtube.com/" in video_url_lower or "youtu.be/" in video_url_lower
@@ -291,13 +287,6 @@ def get_session_lecture(session_id: str) -> dict[str, Any]:
         session = session_service._get_or_load_session(session_id)
     except SessionError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
-    try:
-        stored = get_database().lectures.get_lecture(session.lecture.id)
-        if stored and stored.get("content"):
-            content_data = json.loads(stored["content"])
-            return sanitize_student_lecture(content_data)
-    except Exception:
-        pass
     return sanitize_student_lecture(session.lecture.model_dump(mode="json"))
 
 

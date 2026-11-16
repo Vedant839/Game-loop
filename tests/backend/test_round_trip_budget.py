@@ -43,6 +43,7 @@ def test_session_hot_path_database_statement_budget(monkeypatch):
     lecture = service.lecture_service.get_lecture("math_sample_lecture")
     assert lecture is not None
     target = lecture.interventions[0]
+    counts.clear()
 
     state = service.create_session(
         "math_sample_lecture", client_id="budget", external_user_id="submit"
@@ -84,4 +85,4 @@ def test_session_hot_path_database_statement_budget(monkeypatch):
         "activate": activate_count,
         "sync": sync_count,
         "submit": submit_count,
-    } == {"create_session": 5, "activate": 7, "sync": 5, "submit": 4}
+    } == {"create_session": 7, "activate": 7, "sync": 5, "submit": 4}

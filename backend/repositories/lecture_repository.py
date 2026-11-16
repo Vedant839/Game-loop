@@ -70,6 +70,12 @@ class LectureRepository(BaseRepository):
                 return None
             return dict(row)
 
+    def list_lectures(self) -> list[dict[str, Any]]:
+        """Load lecture records for student-facing summary listings."""
+        with self.db.connection() as conn:
+            cursor = conn.execute("SELECT * FROM lectures ORDER BY updated_at DESC")
+            return [dict(row) for row in cursor.fetchall()]
+
     def list_lectures_by_creator(self, creator_id: str) -> list[dict[str, Any]]:
         """List all lectures belonging to a creator."""
         with self.db.connection() as conn:
