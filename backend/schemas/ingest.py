@@ -2,7 +2,7 @@
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
 
 
 MAX_CREATOR_CONTEXT_BYTES: int = 100 * 1024  # 100 KB limit
@@ -18,6 +18,13 @@ class CreatorContext(BaseModel):
         if len(v.encode("utf-8")) > MAX_CREATOR_CONTEXT_BYTES:
             raise ValueError("Creator context notes exceed 100 KB limit")
         return v
+
+    @model_validator(mode="after")
+    def validate_total_size(self) -> "CreatorContext":
+        context_bytes = len(self.notes.encode("utf-8")) + len(self.chapters.encode("utf-8"))
+        if context_bytes > MAX_CREATOR_CONTEXT_BYTES:
+            raise ValueError("Creator context exceeds 100 KB limit")
+        return self
 
 
 class IngestLectureRequest(BaseModel):

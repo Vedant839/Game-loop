@@ -24,6 +24,8 @@ PRIVATE_RESPONSE_FIELDS = {
     "concepts",
     "analysis_report",
     "creator_context",
+    "notes",
+    "chapters",
     "visual_evidence",
     "generator_version",
     "evidence",

@@ -114,6 +114,30 @@ describe("IngestPage", () => {
     expect(window.localStorage.getItem("gl_creator_gemini_key")).toBe("saved-default-key");
   });
 
+  it("sends creator notes and chapter text with the ingest request", async () => {
+    const lecture = {
+      id: "ingest_context", duration_seconds: 300,
+      video_url: "https://example.com/video.mp4", interventions: [],
+      timing_config: { min_trigger_gap: 90, tolerance: 2 }, transcript: [],
+    };
+    const fetchMock = mockApi(lecture);
+    const onComplete = vi.fn();
+    render(<IngestPage onComplete={onComplete} onCancel={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Creator token"), { target: { value: "creator-token" } });
+    fireEvent.change(screen.getByLabelText("Video URL"), { target: { value: "https://example.com/video.mp4" } });
+    fireEvent.change(screen.getByLabelText("Or paste transcript text"), { target: { value: "Transcript supports the concept." } });
+    fireEvent.click(screen.getByTestId("toggle-context-panel"));
+    fireEvent.change(screen.getByTestId("input-notes"), { target: { value: "Notes support the concept." } });
+    fireEvent.change(screen.getByTestId("input-chapters"), { target: { value: "00:00 Introduction" } });
+    fireEvent.click(screen.getByRole("button", { name: "Generate lecture" }));
+
+    await waitFor(() => expect(onComplete).toHaveBeenCalledWith(lecture));
+    const ingestCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/api/creator/ingest"));
+    expect(JSON.parse(String(ingestCall?.[1]?.body))).toMatchObject({
+      creator_context: { notes: "Notes support the concept.", chapters: "00:00 Introduction" },
+    });
+  });
+
   it("automatically shows the unknown timestamped-captions hint without blocking generation", async () => {
     const lecture = {
       id: "ingest_untimed", duration_seconds: 300,

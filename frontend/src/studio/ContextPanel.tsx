@@ -16,8 +16,8 @@ export const ContextPanel: React.FC<ContextPanelProps> = ({
   onChaptersChange,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const notesBytes = new TextEncoder().encode(notes).length;
-  const isNotesOverLimit = notesBytes > MAX_NOTES_BYTES;
+  const contextBytes = new TextEncoder().encode(`${notes}${chapters}`).length;
+  const isContextOverLimit = contextBytes > MAX_NOTES_BYTES;
 
   return (
     <div
@@ -60,7 +60,7 @@ export const ContextPanel: React.FC<ContextPanelProps> = ({
 
           <div>
             <label style={{ display: "block", fontSize: "0.85rem", color: "#e2e8f0", marginBottom: "4px" }}>
-              Lecture Notes / Slide Text (Plain text or Markdown, max 100 KB)
+              Lecture Notes / Slide Text (Plain text or Markdown; notes and chapters share a 100 KB limit)
             </label>
             <textarea
               rows={4}
@@ -74,17 +74,17 @@ export const ContextPanel: React.FC<ContextPanelProps> = ({
                 borderRadius: "4px",
                 background: "#1e293b",
                 color: "#f8fafc",
-                border: isNotesOverLimit ? "1px solid #ef4444" : "1px solid #475569",
+                border: isContextOverLimit ? "1px solid #ef4444" : "1px solid #475569",
               }}
               data-testid="input-notes"
             />
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", marginTop: "2px" }}>
-              <span style={{ color: isNotesOverLimit ? "#ef4444" : "#94a3b8" }}>
-                {(notesBytes / 1024).toFixed(1)} KB / 100 KB
+              <span style={{ color: isContextOverLimit ? "#ef4444" : "#94a3b8" }}>
+                {(contextBytes / 1024).toFixed(1)} KB / 100 KB
               </span>
-              {isNotesOverLimit && (
+              {isContextOverLimit && (
                 <span style={{ color: "#ef4444" }} data-testid="notes-error">
-                  Exceeds 100 KB limit
+                  Creator context exceeds 100 KB limit
                 </span>
               )}
             </div>

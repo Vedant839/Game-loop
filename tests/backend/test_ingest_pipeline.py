@@ -217,6 +217,63 @@ def test_fabricated_evidence_quote_is_dropped_and_counted():
     assert any(item["stage"] == "evidence" for item in result.analysis_report["generation"]["rejections"])
 
 
+def test_creator_context_evidence_is_fenced_time_anchored_and_never_high_confidence():
+    note = "A stable concept is supported by this creator note."
+    lecture = Lecture.model_validate({
+        "id": "context_fixture",
+        "duration_seconds": 300,
+        "video_url": "https://example.com/context.mp4",
+        "transcript": [{
+            "start_time": 90, "end_time": 120,
+            "text": note,
+        }],
+        "interventions": [],
+    })
+    concept = {
+        "name": "Stable concept", "kind": "definition",
+        "description": "A stable concept is explained by the creator note.",
+        "start_s": 90, "end_s": 120,
+        "evidence": [{"source": "creator_context", "quote": note}],
+    }
+    fake = FakeGeminiClient([concept])
+    result = run_understanding_pipeline(
+        lecture, intensity="standard", api_key="fixture-api-key",
+        creator_id="context_fixture", gemini_client=fake,
+        enforce_monthly_cap=False,
+        creator_context={
+            "notes": note,
+            "chapters": "00:00 Introduction\nmalformed chapter line",
+        },
+    )
+
+    assert result.concepts[0]["confidence"] == "medium"
+    assert result.interventions[0].review_state == "needs_review"
+    assert result.concepts[0]["evidence"][0]["quote"] == note
+    assert result.analysis_report["context_warnings"]
+    extraction_prompt = next(call["contents"] for call in fake.calls if "TRANSCRIPT_START" in call["contents"])
+    assert f"CONTEXT_START\n{note}\nCONTEXT_END" in extraction_prompt
+    assert "CHAPTERS_START" in extraction_prompt
+    assert "Introduction" in extraction_prompt
+
+
+def test_context_size_limit_rejects_combined_notes_and_chapters(tmp_path, monkeypatch, creator_token_factory):
+    import backend.main as main
+
+    service = LectureService(tmp_path / "lectures")
+    service.lectures_dir.mkdir(parents=True)
+    monkeypatch.setattr(main, "get_lecture_service", lambda: service)
+    response = TestClient(app).post(
+        "/api/creator/ingest",
+        headers=creator_token_factory("context_size"),
+        json={
+            "video_url": "https://example.com/context-size.mp4",
+            "duration_seconds": 300,
+            "creator_context": {"notes": "n" * 60_000, "chapters": "c" * 42_401},
+        },
+    )
+    assert response.status_code == 422
+
+
 def test_critic_failure_demotes_all_remaining_checkpoints_to_needs_review():
     result = _run(_load("mary_transcript.json"), FakeGeminiClient([_mary_concepts()[0]], fail_on="critic"))
     assert len(result.interventions) == 1
@@ -235,7 +292,6 @@ def test_ingest_medium_checkpoint_is_hidden_from_public_and_session_lecture_rout
     service = LectureService(tmp_path / "lectures")
     service.lectures_dir.mkdir(parents=True)
     db = get_database()
-    monkeypatch.setattr(main, "get_lecture_service", lambda: service)
     monkeypatch.setattr(session_module, "get_lecture_service", lambda: service)
     monkeypatch.setattr(main, "settings", SimpleNamespace(gemini_api_key=None))
     fake = FakeGeminiClient(_mary_concepts())
@@ -247,6 +303,10 @@ def test_ingest_medium_checkpoint_is_hidden_from_public_and_session_lecture_rout
             "video_url": data["video_url"], "duration_seconds": data["duration_seconds"],
             "captions": _as_srt(data["transcript"]),
             "captions_format": "srt", "intensity": "standard",
+            "creator_context": {
+                "notes": "private-ingest-context-sentinel",
+                "chapters": "00:00 Private chapter sentinel",
+            },
         },
     )
     assert response.status_code == 201
@@ -256,6 +316,8 @@ def test_ingest_medium_checkpoint_is_hidden_from_public_and_session_lecture_rout
     public_payload = TestClient(app).get(f"/api/lectures/{lecture_id}").json()
     assert public_payload["interventions"] == []
     assert not {"concepts", "analysis_report", "creator_context", "visual_evidence"}.intersection(public_payload)
+    assert "private-ingest-context-sentinel" not in json.dumps(public_payload)
+    assert "Private chapter sentinel" not in json.dumps(public_payload)
 
     session_response = TestClient(app).post("/api/sessions", json={"lecture_id": lecture_id})
     assert session_response.status_code == 201
@@ -264,6 +326,8 @@ def test_ingest_medium_checkpoint_is_hidden_from_public_and_session_lecture_rout
     ).json()
     assert session_payload["interventions"] == []
     assert not {"concepts", "analysis_report", "creator_context", "visual_evidence"}.intersection(session_payload)
+    assert "private-ingest-context-sentinel" not in json.dumps(session_payload)
+    assert "Private chapter sentinel" not in json.dumps(session_payload)
 
 
 def test_ingest_session_uses_repository_and_excludes_needs_review(tmp_path, monkeypatch, creator_token_factory):
@@ -279,7 +343,6 @@ def test_ingest_session_uses_repository_and_excludes_needs_review(tmp_path, monk
         raise AssertionError("session creation and restore must use lectures.content")
 
     monkeypatch.setattr(service, "get_lecture", fail_if_file_service_is_used)
-    monkeypatch.setattr(main, "get_lecture_service", lambda: service)
     monkeypatch.setattr(session_module, "get_lecture_service", lambda: service)
     monkeypatch.setattr(main, "settings", SimpleNamespace(gemini_api_key=None))
 
@@ -368,6 +431,8 @@ def test_ingest_session_uses_repository_and_excludes_needs_review(tmp_path, monk
     assert [item["id"] for item in created.json()["interventions"]] == [auto["id"]]
     stored_session = get_database().load_session(session_id)
     assert set(stored_session["interventions_state"]) == {auto["id"]}
+    session_lecture = client.get(f"/api/sessions/{session_id}/lecture")
+    assert "The auto concept is also supported by this creator note." not in session_lecture.text
 
     session_service = get_session_service()
     session_service._sessions.pop(session_id)
