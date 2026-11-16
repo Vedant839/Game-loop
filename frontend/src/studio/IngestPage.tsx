@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ingestLecture,
   fetchPreflight,
@@ -17,7 +17,6 @@ import {
 type Props = { onComplete: (lecture: Lecture) => void; onCancel: () => void };
 type Stage =
   | "ready"
-  | "checking_preflight"
   | "reading_duration"
   | "transcribing"
   | "visual_analysis"
@@ -88,6 +87,46 @@ export default function IngestPage({ onComplete, onCancel }: Props) {
   const [preflightReport, setPreflightReport] = useState<PreflightReportData | null>(null);
   const [visualEvidence, setVisualEvidence] = useState<VisualEvidenceItem[]>([]);
   const [visualAnalysisStatus, setVisualAnalysisStatus] = useState<string | null>(null);
+  const [preflightStatus, setPreflightStatus] = useState<"idle" | "checking" | "error">("idle");
+
+  useEffect(() => {
+    const hasCaptions = Boolean(captionFile || transcript.trim());
+    if (!creatorToken.trim() || !videoUrl.trim() || !hasCaptions) {
+      setPreflightReport(null);
+      setPreflightStatus("idle");
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      setPreflightStatus("checking");
+      try {
+        const captions = captionFile ? await captionFile.text() : transcript;
+        const captionsFormat: IngestLecturePayload["captions_format"] = captionFile
+          ? captionFile.name.toLowerCase().endsWith(".vtt") ? "vtt" : "srt"
+          : "text";
+        const durationSeconds = await readVideoDuration(videoUrl);
+        const report = await fetchPreflight(
+          { captions, captions_format: captionsFormat, duration_seconds: durationSeconds },
+          creatorToken,
+        );
+        if (!cancelled) {
+          setPreflightReport(report);
+          setPreflightStatus("idle");
+        }
+      } catch {
+        if (!cancelled) {
+          setPreflightReport(null);
+          setPreflightStatus("error");
+        }
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [captionFile, creatorToken, transcript, videoUrl]);
 
   const saveKey = (value: string) => {
     setGeminiKey(value);
@@ -98,37 +137,6 @@ export default function IngestPage({ onComplete, onCancel }: Props) {
   };
 
   const activeGeminiKey = useLectureKey ? lectureGeminiKey : geminiKey;
-
-  const handlePreflightCheck = async () => {
-    if (!creatorToken.trim()) {
-      setError("Enter a creator token first to run preflight check.");
-      return;
-    }
-    setError(null);
-    try {
-      setStage("checking_preflight");
-      const durationSeconds = await readVideoDuration(videoUrl);
-      let captions = transcript;
-      let captionsFormat: "srt" | "vtt" | "text" = "text";
-      if (captionFile) {
-        captions = await captionFile.text();
-        captionsFormat = captionFile.name.toLowerCase().endsWith(".vtt") ? "vtt" : "srt";
-      }
-      const report = await fetchPreflight(
-        {
-          captions,
-          captions_format: captionsFormat,
-          duration_seconds: durationSeconds,
-        },
-        creatorToken
-      );
-      setPreflightReport(report);
-      setStage("ready");
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Preflight check failed.");
-      setStage("error");
-    }
-  };
 
   const handleRunVisualAnalysis = async () => {
     if (!preflightReport || preflightReport.weak_windows.length === 0) return;
@@ -207,7 +215,6 @@ export default function IngestPage({ onComplete, onCancel }: Props) {
   };
 
   const busy =
-    stage === "checking_preflight" ||
     stage === "reading_duration" ||
     stage === "transcribing" ||
     stage === "visual_analysis" ||
@@ -315,27 +322,14 @@ export default function IngestPage({ onComplete, onCancel }: Props) {
           />
         </label>
 
-        {/* Preflight Check Button */}
-        <div style={{ margin: "8px 0" }}>
-          <button
-            type="button"
-            onClick={handlePreflightCheck}
-            disabled={busy || (!transcript && !captionFile)}
-            style={{
-              background: "#334155",
-              color: "#f8fafc",
-              border: "1px solid #475569",
-              padding: "6px 12px",
-              borderRadius: "4px",
-              cursor: "pointer",
-              fontSize: "0.85rem",
-            }}
-            data-testid="btn-preflight"
-          >
-            Check quality (preflight)
-          </button>
-        </div>
-
+        {preflightStatus === "checking" && (
+          <p role="status" data-testid="preflight-loading">Checking transcript quality…</p>
+        )}
+        {preflightStatus === "error" && (
+          <p role="status" data-testid="preflight-unavailable">
+            Preflight is unavailable. You can still generate the lecture.
+          </p>
+        )}
         {preflightReport && (
           <PreflightReport
             report={preflightReport}
@@ -360,9 +354,7 @@ export default function IngestPage({ onComplete, onCancel }: Props) {
 
         {busy && (
           <p role="status">
-            {stage === "checking_preflight"
-              ? "Analyzing transcript quality..."
-              : stage === "reading_duration"
+            {stage === "reading_duration"
               ? "Reading video length…"
               : stage === "transcribing"
               ? "Transcribing audio in your browser…"
